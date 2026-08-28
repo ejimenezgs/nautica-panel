@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Nautica Panel</title>
+  <meta name="robots" content="noindex,nofollow" />
+  <link rel="stylesheet" href="./css/styles.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <section id="authView" class="auth-view">
+      <div class="auth-card">
+        <div class="brand-block">
+          <div class="brand-mark">NAUTICA</div>
+          <div class="brand-subtitle">HOME · PANEL</div>
+        </div>
+
+        <form id="loginForm" class="auth-form">
+          <label>
+            <span>Correo electrónico</span>
+            <input id="email" type="email" autocomplete="email" required />
+          </label>
+          <label>
+            <span>Contraseña</span>
+            <input id="password" type="password" autocomplete="current-password" required />
+          </label>
+          <button id="loginButton" type="submit">Iniciar sesión</button>
+          <p id="loginError" class="form-message error" aria-live="polite"></p>
+        </form>
+      </div>
+    </section>
+
+    <section id="panelView" class="panel-view is-hidden">
+      <aside class="sidebar">
+        <div>
+          <div class="panel-brand">NAUTICA</div>
+          <div class="panel-brand-sub">HOME · PANEL</div>
+        </div>
+
+        <nav class="nav-list" aria-label="Navegación principal">
+          <button class="nav-item active" data-view="newsletter">Newsletter</button>
+          <button class="nav-item disabled" disabled>Productos <span>Próximamente</span></button>
+          <button class="nav-item disabled" disabled>Ventas <span>Próximamente</span></button>
+          <button class="nav-item disabled" disabled>Leads <span>Próximamente</span></button>
+          <button class="nav-item disabled" disabled>Contacto <span>Próximamente</span></button>
+        </nav>
+
+        <button id="logoutButton" class="logout-button">Cerrar sesión</button>
+      </aside>
+
+      <section class="content-area">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Nautica Home</p>
+            <h1>Newsletter</h1>
+          </div>
+          <div class="user-chip">
+            <span id="userEmail">—</span>
+          </div>
+        </header>
+
+        <section class="stats-grid">
+          <article class="stat-card">
+            <span class="stat-label">Suscriptores</span>
+            <strong id="subscriberCount">0</strong>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Altas hoy</span>
+            <strong id="todayCount">0</strong>
+          </article>
+        </section>
+
+        <section class="table-card">
+          <div class="table-toolbar">
+            <div>
+              <h2>Lista de newsletter</h2>
+              <p>Suscriptores registrados desde el landing.</p>
+            </div>
+            <button id="refreshButton" class="secondary-button">Actualizar</button>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Correo</th>
+                  <th>Fecha de alta</th>
+                  <th>Origen</th>
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody id="newsletterBody">
+                <tr>
+                  <td colspan="4" class="empty-state">Conecta Firebase para cargar suscriptores.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p id="newsletterMessage" class="form-message" aria-live="polite"></p>
+        </section>
+      </section>
+    </section>
+  </main>
+
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>
