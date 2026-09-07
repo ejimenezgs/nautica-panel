@@ -23,11 +23,28 @@ function jsonResponse(int $status, array $payload): never {
 }
 
 function bearerToken(): string {
-    $header = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
-    if (!preg_match('/^Bearer\s+(.+)$/i', trim($header), $m)) {
-        jsonResponse(401, ['ok' => false, 'error' => 'Missing Firebase authorization token.']);
+    // Shared hosting / CGI setups can strip the standard Authorization header.
+    // Accept multiple safe transport paths while still validating the token
+    // against Firebase before allowing any asset operation.
+    $header = $_SERVER['HTTP_AUTHORIZATION']
+        ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION']
+        ?? '';
+
+    if (preg_match('/^Bearer\s+(.+)$/i', trim((string) $header), $m)) {
+        return trim($m[1]);
     }
-    return trim($m[1]);
+
+    $customHeader = trim((string) ($_SERVER['HTTP_X_FIREBASE_TOKEN'] ?? ''));
+    if ($customHeader !== '') {
+        return $customHeader;
+    }
+
+    $formToken = trim((string) ($_POST['_firebaseToken'] ?? ''));
+    if ($formToken !== '') {
+        return $formToken;
+    }
+
+    jsonResponse(401, ['ok' => false, 'error' => 'Missing Firebase authorization token.']);
 }
 
 function curlJson(string $url, string $method = 'GET', ?array $body = null, array $headers = []): array {

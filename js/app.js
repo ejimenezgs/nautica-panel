@@ -571,21 +571,34 @@ async function uploadAsset(input) {
   const oldHint = section?.querySelector(".summary-hint");
   const oldUrl = String(urlInput?.value || getByPath(contentCache, path) || "").trim();
 
-  if (oldHint) oldHint.textContent = "Subiendo…";
+  if (oldHint) oldHint.textContent = "Comprobando storage…";
   input.disabled = true;
 
   let uploadedUrl = "";
   try {
     const token = await auth.currentUser.getIdToken();
+
+    // Fail fast with a useful message instead of leaving the UI at "Subiendo…"
+    // when PHP cannot write to the persistent cPanel asset directory.
+    await checkAssetHealth(token);
+
+    if (oldHint) oldHint.textContent = "Subiendo…";
+
     const body = new FormData();
     body.append("file", file);
     body.append("key", key);
+    // Fallback for cPanel/CGI installations that strip Authorization headers.
+    body.append("_firebaseToken", token);
 
-    const uploadResponse = await fetch("api/upload-website-asset.php", {
+    const uploadResponse = await fetchWithTimeout("api/upload-website-asset.php", {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "X-Firebase-Token": token
+      },
       body
-    });
+    }, 45000);
+
     const uploadResult = await safeJson(uploadResponse);
     if (!uploadResponse.ok || !uploadResult?.ok || !uploadResult?.url) {
       throw new Error(uploadResult?.error || `Upload failed (${uploadResponse.status})`);
@@ -633,8 +646,39 @@ async function uploadAsset(input) {
   } finally {
     input.value = "";
     input.disabled = false;
-    setTimeout(() => { if (oldHint) oldHint.textContent = "Editar"; }, 1800);
+    setTimeout(() => { if (oldHint) oldHint.textContent = "Editar"; }, 2200);
   }
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error("El servidor tardó demasiado en responder. Revisa el endpoint PHP y permisos de la carpeta assets-nautica.");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function checkAssetHealth(token) {
+  const response = await fetchWithTimeout("api/asset-health.php", {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "X-Firebase-Token": token
+    },
+    cache: "no-store"
+  }, 12000);
+  const result = await safeJson(response);
+  if (!response.ok || !result?.ok) {
+    throw new Error(result?.error || `El storage de cPanel no está disponible (${response.status}).`);
+  }
+  return result;
 }
 
 function getByPath(target, path) {
@@ -650,14 +694,15 @@ async function safeJson(response) {
 }
 
 async function requestAssetDelete(url, token) {
-  const response = await fetch("api/delete-website-asset.php", {
+  const response = await fetchWithTimeout("api/delete-website-asset.php", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
+      "X-Firebase-Token": token,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({ url })
-  });
+  }, 20000);
   const result = await safeJson(response);
   if (!response.ok || !result?.ok) {
     throw new Error(result?.error || `Delete failed (${response.status})`);

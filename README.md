@@ -86,3 +86,11 @@ Confirma que PHP ejecutado bajo el usuario de cPanel tenga permiso de escritura 
 ## Deploy
 `.cpanel.yml` ahora despliega también `api/`.
 No existe ningún comando que borre `/public_html/assets-nautica`; el storage persistente queda completamente separado del repositorio.
+
+## v5 - cPanel upload reliability fix
+
+- Keeps cPanel as the persistent Web Design asset storage.
+- Adds authenticated `api/asset-health.php` preflight so upload failures show an explicit error instead of remaining on "Subiendo...".
+- Supports Firebase token transport through `Authorization`, `X-Firebase-Token`, and multipart fallback for shared-hosting/CGI configurations that strip the standard Authorization header.
+- Adds browser-side timeouts for health, upload, and delete requests.
+- Does not change Firestore content paths or the public asset URL format.
