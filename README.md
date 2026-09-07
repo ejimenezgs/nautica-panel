@@ -1,35 +1,65 @@
-# Nautica Panel Beta v2
+# Nautica Panel v3 — Web Design + Mensajes
 
-Primera beta funcional del panel administrativo de Nautica Home.
+Base inspeccionada: `nautica-panel-beta-v2-firebase(2).zip`.
+Firebase: proyecto existente `nautica-ca65d`.
 
-## Incluye
-- Firebase Authentication con email/password.
-- Sesion persistente mediante Firebase Auth.
-- Modulo Newsletter conectado a Firestore.
-- Coleccion esperada: `newsletterSubscribers`.
-- Contadores de suscriptores totales y altas del dia.
-- Archivo `firestore.rules` con una base de reglas para la beta.
-- Estructura preparada para Productos, Ventas, Leads y Contacto.
+## Colecciones / documentos
 
-## Firebase
-El proyecto ya esta configurado en `js/firebase-config.js` para `nautica-ca65d`.
+### `newsletterSubscribers/{email}`
+Se conserva la integración existente.
 
-En Firebase Console confirma:
-1. Authentication > Sign-in method > Email/Password habilitado.
-2. El usuario administrador creado en Authentication > Users.
-3. Firestore Database creada.
-4. Publicar las reglas incluidas en `firestore.rules`.
+### `siteContent/home`
+Fuente de verdad del contenido administrable de `nauticahome.com.mx`.
 
-## Estructura de Newsletter
-Cada documento de `newsletterSubscribers` puede usar:
+Campos raíz:
+- `globalSettings.facebookUrl`
+- `globalSettings.instagramUrl`
+- `globalSettings.whatsappUrl`
+- `utility.message`
+- `utility.contactLabel`
+- `footer.copyright`
+- `sections.hero`
+- `sections.products`
+- `sections.about`
+- `sections.retailers`
+- `sections.inspiration`
+- `sections.newsletter`
+- `sections.contact`
+- `updatedAt`
+- `updatedBy`
 
-- `email`: string
-- `createdAt`: Firestore Timestamp
-- `source`: string, recomendado `Landing`
-- `status`: string, actualmente `active`
+Cada sección incluye `enabled`. La web pública conserva el HTML actual como fallback si el documento o un campo no existe.
 
-El landing podra escribir documentos nuevos sin iniciar sesion. La lectura de la lista queda limitada a usuarios autenticados del panel.
+### `contactMessages/{autoId}`
+Creado por el formulario público.
 
-## Desarrollo local
-Al usar ES modules, abrir mediante un servidor HTTP local en lugar de `file://`.
-Ejemplos: VS Code Live Server, `python3 -m http.server`, GitHub Pages o hosting web.
+Campos de creación:
+- `name`
+- `email`
+- `phone`
+- `message`
+- `source` = `nauticahome.com.mx`
+- `status` = `unread`
+- `createdAt`
+
+El panel puede añadir al gestionar:
+- `readAt`
+- `archivedAt`
+- `restoredAt`
+- `status` = `read` / `archived`
+
+## Firebase Storage (opcional pero integrado)
+El editor acepta URL manual siempre. El botón **Subir** usa el bucket existente y guarda archivos bajo:
+
+`siteContent/home/...`
+
+Publica `storage.rules` si quieres usar upload directo desde el panel. Si Storage no está habilitado, los campos URL siguen funcionando.
+
+## Seguridad
+Publica `firestore.rules` de este paquete en el proyecto `nautica-ca65d`.
+No hay permisos globales abiertos:
+- público: lectura de `siteContent/home`, creación validada de mensajes y flujo existente de newsletter;
+- autenticado: gestión de contenido, mensajes y newsletter.
+
+## Deploy
+Mantén el flujo Git/cPanel actual de `panel.nauticahome.com.mx`.

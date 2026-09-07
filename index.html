@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Nautica Panel</title>
-  <meta name="robots" content="noindex,nofollow" />
+  <meta name="robots" content="noindex,nofollow,noarchive,nosnippet" />
   <link rel="stylesheet" href="./css/styles.css" />
 </head>
 <body>
@@ -15,16 +15,9 @@
           <div class="brand-mark">NAUTICA</div>
           <div class="brand-subtitle">HOME · PANEL</div>
         </div>
-
         <form id="loginForm" class="auth-form">
-          <label>
-            <span>Correo electrónico</span>
-            <input id="email" type="email" autocomplete="email" required />
-          </label>
-          <label>
-            <span>Contraseña</span>
-            <input id="password" type="password" autocomplete="current-password" required />
-          </label>
+          <label><span>Correo electrónico</span><input id="email" type="email" autocomplete="email" required /></label>
+          <label><span>Contraseña</span><input id="password" type="password" autocomplete="current-password" required /></label>
           <button id="loginButton" type="submit">Iniciar sesión</button>
           <p id="loginError" class="form-message error" aria-live="polite"></p>
         </form>
@@ -40,10 +33,11 @@
 
         <nav class="nav-list" aria-label="Navegación principal">
           <button class="nav-item active" data-view="newsletter">Newsletter</button>
+          <button class="nav-item" data-view="messages">Mensajes <span id="messageBadge" class="nav-badge is-hidden">0</span></button>
+          <button class="nav-item" data-view="webdesign">Web Design</button>
           <button class="nav-item disabled" disabled>Productos <span>Próximamente</span></button>
           <button class="nav-item disabled" disabled>Ventas <span>Próximamente</span></button>
           <button class="nav-item disabled" disabled>Leads <span>Próximamente</span></button>
-          <button class="nav-item disabled" disabled>Contacto <span>Próximamente</span></button>
         </nav>
 
         <button id="logoutButton" class="logout-button">Cerrar sesión</button>
@@ -53,55 +47,88 @@
         <header class="topbar">
           <div>
             <p class="eyebrow">Nautica Home</p>
-            <h1>Newsletter</h1>
+            <h1 id="viewTitle">Newsletter</h1>
           </div>
-          <div class="user-chip">
-            <span id="userEmail">—</span>
-          </div>
+          <div class="user-chip"><span id="userEmail">—</span></div>
         </header>
 
-        <section class="stats-grid">
-          <article class="stat-card">
-            <span class="stat-label">Suscriptores</span>
-            <strong id="subscriberCount">0</strong>
-          </article>
-          <article class="stat-card">
-            <span class="stat-label">Altas hoy</span>
-            <strong id="todayCount">0</strong>
-          </article>
+        <section class="panel-view-content" data-panel-view="newsletter">
+          <section class="stats-grid">
+            <article class="stat-card"><span class="stat-label">Suscriptores</span><strong id="subscriberCount">0</strong></article>
+            <article class="stat-card"><span class="stat-label">Altas hoy</span><strong id="todayCount">0</strong></article>
+          </section>
+
+          <section class="table-card">
+            <div class="table-toolbar">
+              <div><h2>Lista de newsletter</h2><p>Suscriptores registrados desde el landing.</p></div>
+              <button id="refreshButton" class="secondary-button">Actualizar</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Correo</th><th>Fecha de alta</th><th>Origen</th><th>Estado</th></tr></thead>
+                <tbody id="newsletterBody"><tr><td colspan="4" class="empty-state">Cargando…</td></tr></tbody>
+              </table>
+            </div>
+            <p id="newsletterMessage" class="form-message" aria-live="polite"></p>
+          </section>
         </section>
 
-        <section class="table-card">
-          <div class="table-toolbar">
-            <div>
-              <h2>Lista de newsletter</h2>
-              <p>Suscriptores registrados desde el landing.</p>
-            </div>
-            <button id="refreshButton" class="secondary-button">Actualizar</button>
-          </div>
+        <section class="panel-view-content is-hidden" data-panel-view="messages">
+          <section class="stats-grid">
+            <article class="stat-card"><span class="stat-label">No leídos</span><strong id="unreadCount">0</strong></article>
+            <article class="stat-card"><span class="stat-label">Total</span><strong id="messageCount">0</strong></article>
+          </section>
 
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Correo</th>
-                  <th>Fecha de alta</th>
-                  <th>Origen</th>
-                  <th>Estado</th>
-                </tr>
-              </thead>
-              <tbody id="newsletterBody">
-                <tr>
-                  <td colspan="4" class="empty-state">Conecta Firebase para cargar suscriptores.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <p id="newsletterMessage" class="form-message" aria-live="polite"></p>
+          <section class="table-card">
+            <div class="table-toolbar messages-toolbar">
+              <div><h2>Mensajes de contacto</h2><p>Envíos recibidos desde nauticahome.com.mx en tiempo real.</p></div>
+              <div class="segmented-control" aria-label="Filtro de mensajes">
+                <button class="segment active" data-message-filter="inbox">Bandeja</button>
+                <button class="segment" data-message-filter="archived">Archivados</button>
+              </div>
+            </div>
+            <div id="messagesList" class="messages-list"><p class="empty-state">Cargando mensajes…</p></div>
+            <p id="messagesMessage" class="form-message" aria-live="polite"></p>
+          </section>
+        </section>
+
+        <section class="panel-view-content is-hidden" data-panel-view="webdesign">
+          <section class="editor-header-card">
+            <div>
+              <p class="eyebrow">Contenido público</p>
+              <h2>Landing de Nautica Home</h2>
+              <p>Los campos vacíos conservan el contenido HTML actual como fallback.</p>
+            </div>
+            <div class="editor-actions">
+              <span id="contentState" class="save-state">Cargando…</span>
+              <button id="saveContentButton" class="primary-button" type="button">Guardar cambios</button>
+            </div>
+          </section>
+          <form id="webDesignForm" class="webdesign-form" novalidate></form>
         </section>
       </section>
     </section>
   </main>
+
+  <div id="messageDrawer" class="message-drawer is-hidden" aria-hidden="true">
+    <button id="messageDrawerBackdrop" class="message-drawer-backdrop" type="button" aria-label="Cerrar detalle"></button>
+    <aside class="message-drawer-panel" aria-label="Detalle de mensaje">
+      <div class="drawer-header">
+        <div><p class="eyebrow">Mensaje</p><h2 id="drawerName">—</h2></div>
+        <button id="closeMessageDrawer" class="icon-button" type="button" aria-label="Cerrar">×</button>
+      </div>
+      <dl class="message-meta">
+        <div><dt>Correo</dt><dd id="drawerEmail">—</dd></div>
+        <div><dt>Teléfono</dt><dd id="drawerPhone">—</dd></div>
+        <div><dt>Fecha</dt><dd id="drawerDate">—</dd></div>
+        <div><dt>Origen</dt><dd id="drawerSource">—</dd></div>
+      </dl>
+      <div class="message-body" id="drawerMessage"></div>
+      <div class="drawer-actions">
+        <button id="archiveMessageButton" class="secondary-button" type="button">Archivar</button>
+      </div>
+    </aside>
+  </div>
 
   <script type="module" src="./js/app.js"></script>
 </body>

@@ -9,3 +9,6 @@ export const firebaseConfig = {
 };
 
 export const NEWSLETTER_COLLECTION = "newsletterSubscribers";
+export const CONTACT_COLLECTION = "contactMessages";
+export const SITE_CONTENT_COLLECTION = "siteContent";
+export const SITE_CONTENT_HOME_DOC = "home";
