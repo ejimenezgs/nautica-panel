@@ -3,16 +3,27 @@ deployment:
   tasks:
     - export DEPLOYPATH=/home/gyu5la0fbzjq/public_html/panel.nauticahome.com.mx
 
-    # Limpiar solo archivos de la web gestionados por Git.
-    # Conserva carpetas del servidor como .well-known y cgi-bin.
+    # Limpiar carpetas gestionadas por Git
     - /bin/rm -rf "$DEPLOYPATH/assets"
     - /bin/rm -rf "$DEPLOYPATH/css"
     - /bin/rm -rf "$DEPLOYPATH/js"
+    - /bin/rm -rf "$DEPLOYPATH/api"
     - /bin/rm -rf "$DEPLOYPATH/__MACOSX"
+
+    # Limpiar HTML actuales
     - /bin/rm -f "$DEPLOYPATH"/*.html
 
-    # Desplegar el build actual del panel.
+    # Copiar assets
     - if [ -d assets ]; then /bin/cp -R assets "$DEPLOYPATH/"; fi
+
+    # Copiar CSS
     - if [ -d css ]; then /bin/cp -R css "$DEPLOYPATH/"; fi
+
+    # Copiar JS
     - if [ -d js ]; then /bin/cp -R js "$DEPLOYPATH/"; fi
+
+    # Copiar endpoints PHP del Panel
+    - if [ -d api ]; then /bin/cp -R api "$DEPLOYPATH/"; fi
+
+    # Copiar todos los HTML de la raíz
     - if ls *.html >/dev/null 2>&1; then /bin/cp *.html "$DEPLOYPATH/"; fi
