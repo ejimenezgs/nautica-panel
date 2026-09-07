@@ -19,12 +19,6 @@ import {
   updateDoc
 } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 import {
-  getDownloadURL,
-  getStorage,
-  ref as storageRef,
-  uploadBytes
-} from "https://www.gstatic.com/firebasejs/12.2.1/firebase-storage.js";
-import {
   firebaseConfig,
   NEWSLETTER_COLLECTION,
   CONTACT_COLLECTION,
@@ -154,7 +148,6 @@ const contentState = document.querySelector("#contentState");
 const isConfigured = !Object.values(firebaseConfig).some((value) => String(value).includes("YOUR_"));
 let auth = null;
 let db = null;
-let storage = null;
 let unsubscribeMessages = null;
 let messagesCache = [];
 let messageFilter = "inbox";
@@ -165,7 +158,6 @@ if (isConfigured) {
   const app = initializeApp(firebaseConfig);
   auth = getAuth(app);
   db = getFirestore(app);
-  storage = getStorage(app);
 
   onAuthStateChanged(auth, async (user) => {
     if (user) {
@@ -494,14 +486,22 @@ function toggleField(label, path, value) {
 }
 
 function imageField(label, path, value, uploadKey, accept = "image/*") {
+  const current = String(value ?? "");
+  const isVideo = accept.startsWith("video/");
+  const preview = current
+    ? (isVideo
+      ? `<video class="asset-preview" src="${escapeAttr(current)}" muted playsinline preload="metadata"></video>`
+      : `<img class="asset-preview" src="${escapeAttr(current)}" alt="" loading="lazy" />`)
+    : `<div class="asset-preview asset-preview-empty">Sin archivo</div>`;
   return `<div class="editor-field editor-field-wide image-field">
     <span>${escapeHtml(label)}</span>
+    <div class="asset-preview-wrap" data-asset-preview>${preview}</div>
     <div class="image-input-row">
-      <input type="url" data-path="${escapeHtml(path)}" value="${escapeAttr(value ?? "")}" placeholder="https://… o assets/…" />
-      <button class="secondary-button compact" type="button" data-upload-button>Subir</button>
+      <input type="url" data-path="${escapeHtml(path)}" value="${escapeAttr(current)}" placeholder="https://assets.nauticahome.com.mx/…" />
+      <button class="secondary-button compact" type="button" data-upload-button>Subir / reemplazar</button>
       <input class="file-input" type="file" accept="${escapeAttr(accept)}" data-upload-path="${escapeHtml(path)}" data-upload-key="${escapeHtml(uploadKey)}" />
     </div>
-    <small>URL pública o asset relativo. “Subir” usa Firebase Storage si está habilitado.</small>
+    <small>La URL guardada en Firebase es la fuente de verdad. Las nuevas subidas se almacenan en cPanel.</small>
   </div>`;
 }
 
@@ -560,30 +560,136 @@ function collectEditorData() {
 
 async function uploadAsset(input) {
   const file = input.files?.[0];
-  if (!file || !storage) return;
+  if (!file || !auth?.currentUser || !db) return;
+
   const path = input.dataset.uploadPath;
   const key = input.dataset.uploadKey || "asset";
-  const urlInput = input.closest(".image-field")?.querySelector(`[data-path="${CSS.escape(path)}"]`);
+  const field = input.closest(".image-field");
+  const urlInput = field?.querySelector(`[data-path="${CSS.escape(path)}"]`);
+  const previewWrap = field?.querySelector("[data-asset-preview]");
   const section = input.closest(".editor-section");
   const oldHint = section?.querySelector(".summary-hint");
+  const oldUrl = String(urlInput?.value || getByPath(contentCache, path) || "").trim();
+
   if (oldHint) oldHint.textContent = "Subiendo…";
+  input.disabled = true;
+
+  let uploadedUrl = "";
   try {
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]+/g, "-").slice(-100);
-    const ref = storageRef(storage, `siteContent/home/${key}/${Date.now()}-${safeName}`);
-    await uploadBytes(ref, file, { contentType: file.type || undefined });
-    const url = await getDownloadURL(ref);
-    if (urlInput) {
-      urlInput.value = url;
-      urlInput.dispatchEvent(new Event("input", { bubbles: true }));
+    const token = await auth.currentUser.getIdToken();
+    const body = new FormData();
+    body.append("file", file);
+    body.append("key", key);
+
+    const uploadResponse = await fetch("api/upload-website-asset.php", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body
+    });
+    const uploadResult = await safeJson(uploadResponse);
+    if (!uploadResponse.ok || !uploadResult?.ok || !uploadResult?.url) {
+      throw new Error(uploadResult?.error || `Upload failed (${uploadResponse.status})`);
     }
-    if (oldHint) oldHint.textContent = "Subido";
+    uploadedUrl = uploadResult.url;
+
+    // Persist ONLY this asset field (plus metadata), so unrelated unsaved form
+    // edits are not accidentally committed by an image replacement.
+    await updateDoc(doc(db, SITE_CONTENT_COLLECTION, SITE_CONTENT_HOME_DOC), {
+      [path]: uploadedUrl,
+      updatedAt: serverTimestamp(),
+      updatedBy: auth.currentUser.email || "authenticated-user"
+    });
+
+    setByPath(contentCache, path, uploadedUrl);
+    if (urlInput) urlInput.value = uploadedUrl;
+    renderAssetPreview(previewWrap, uploadedUrl, input.accept);
+    if (oldHint) oldHint.textContent = "Guardado";
+
+    // Delete only AFTER Firestore confirms the new URL. The PHP endpoint
+    // independently verifies that the old URL belongs to our asset domain and
+    // is no longer referenced anywhere in siteContent/home.
+    if (isManagedCpanelAsset(oldUrl) && oldUrl !== uploadedUrl) {
+      try {
+        await requestAssetDelete(oldUrl, token);
+      } catch (deleteError) {
+        console.warn("Old asset was preserved:", deleteError);
+      }
+    }
   } catch (error) {
-    console.error("Storage upload failed", error);
+    console.error("cPanel website asset upload failed", error);
     if (oldHint) oldHint.textContent = "Error de upload";
-    alert("No fue posible subir el archivo. Puedes pegar una URL manualmente o revisar Firebase Storage.");
+
+    // If upload succeeded but Firestore failed, clean only the newly uploaded
+    // orphan. The previous image is intentionally preserved.
+    if (uploadedUrl && isManagedCpanelAsset(uploadedUrl)) {
+      try {
+        const token = await auth.currentUser.getIdToken();
+        await requestAssetDelete(uploadedUrl, token);
+      } catch (cleanupError) {
+        console.warn("New orphan asset could not be cleaned automatically:", cleanupError);
+      }
+    }
+    alert(error?.message || "No fue posible subir y guardar el archivo.");
   } finally {
     input.value = "";
-    setTimeout(() => { if (oldHint) oldHint.textContent = "Editar"; }, 1600);
+    input.disabled = false;
+    setTimeout(() => { if (oldHint) oldHint.textContent = "Editar"; }, 1800);
+  }
+}
+
+function getByPath(target, path) {
+  return path.split(".").reduce((cursor, part) => cursor?.[/^\d+$/.test(part) ? Number(part) : part], target);
+}
+
+function isManagedCpanelAsset(url) {
+  return typeof url === "string" && url.startsWith("https://assets.nauticahome.com.mx/");
+}
+
+async function safeJson(response) {
+  try { return await response.json(); } catch { return null; }
+}
+
+async function requestAssetDelete(url, token) {
+  const response = await fetch("api/delete-website-asset.php", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ url })
+  });
+  const result = await safeJson(response);
+  if (!response.ok || !result?.ok) {
+    throw new Error(result?.error || `Delete failed (${response.status})`);
+  }
+  return result;
+}
+
+function renderAssetPreview(container, url, accept = "image/*") {
+  if (!container) return;
+  container.innerHTML = "";
+  if (!url) {
+    const empty = document.createElement("div");
+    empty.className = "asset-preview asset-preview-empty";
+    empty.textContent = "Sin archivo";
+    container.appendChild(empty);
+    return;
+  }
+  if (accept.startsWith("video/")) {
+    const video = document.createElement("video");
+    video.className = "asset-preview";
+    video.src = url;
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = "metadata";
+    container.appendChild(video);
+  } else {
+    const image = document.createElement("img");
+    image.className = "asset-preview";
+    image.src = url;
+    image.alt = "";
+    image.loading = "lazy";
+    container.appendChild(image);
   }
 }
 

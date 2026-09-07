@@ -1,65 +1,88 @@
-# Nautica Panel v3 — Web Design + Mensajes
+# Nautica Panel v4 — Web Design + Mensajes + cPanel Assets
 
-Base inspeccionada: `nautica-panel-beta-v2-firebase(2).zip`.
-Firebase: proyecto existente `nautica-ca65d`.
+Base real de esta versión: `nautica-panel-main-v3-webdesign-messages.zip`.
+Firebase existente: `nautica-ca65d`.
 
-## Colecciones / documentos
+## Contenido y mensajes
+Se conserva sin cambios de esquema:
+- `newsletterSubscribers/{email}`
+- `siteContent/home`
+- `contactMessages/{autoId}`
 
-### `newsletterSubscribers/{email}`
-Se conserva la integración existente.
+La URL almacenada en los campos `imageUrl`, `logoUrl` y `videoUrl` de `siteContent/home` sigue siendo la fuente de verdad para Nautica Home.
 
-### `siteContent/home`
-Fuente de verdad del contenido administrable de `nauticahome.com.mx`.
+## Nuevo storage de imágenes en cPanel
+Las nuevas subidas de Web Design ya no usan Firebase Storage.
 
-Campos raíz:
-- `globalSettings.facebookUrl`
-- `globalSettings.instagramUrl`
-- `globalSettings.whatsappUrl`
-- `utility.message`
-- `utility.contactLabel`
-- `footer.copyright`
-- `sections.hero`
-- `sections.products`
-- `sections.about`
-- `sections.retailers`
-- `sections.inspiration`
-- `sections.newsletter`
-- `sections.contact`
-- `updatedAt`
-- `updatedBy`
+Endpoints:
+- `api/upload-website-asset.php`
+- `api/delete-website-asset.php`
+- helper privado: `api/_asset-common.php`
 
-Cada sección incluye `enabled`. La web pública conserva el HTML actual como fallback si el documento o un campo no existe.
+Configuración central en `api/_asset-common.php`:
 
-### `contactMessages/{autoId}`
-Creado por el formulario público.
+```php
+define('ASSET_PHYSICAL_BASE', getenv('NAUTICA_ASSET_PHYSICAL_BASE') ?: '/home/gyu5la0fbzjq/public_html/assets-nautica');
+define('ASSET_PUBLIC_BASE', getenv('NAUTICA_ASSET_PUBLIC_BASE') ?: 'https://assets.nauticahome.com.mx');
+```
 
-Campos de creación:
-- `name`
-- `email`
-- `phone`
-- `message`
-- `source` = `nauticahome.com.mx`
-- `status` = `unread`
-- `createdAt`
+Si el Document Root real de `assets.nauticahome.com.mx` es diferente, cambia SOLO `ASSET_PHYSICAL_BASE` antes del deploy.
 
-El panel puede añadir al gestionar:
-- `readAt`
-- `archivedAt`
-- `restoredAt`
-- `status` = `read` / `archived`
+Estructura creada automáticamente al subir:
+- `home/hero/`
+- `home/products/`
+- `home/about/`
+- `home/stores/`
+- `home/inspiration/`
+- `home/newsletter/`
+- `home/contact/`
 
-## Firebase Storage (opcional pero integrado)
-El editor acepta URL manual siempre. El botón **Subir** usa el bucket existente y guarda archivos bajo:
+## Flujo seguro de reemplazo
+1. El Panel obtiene un Firebase ID token del usuario autenticado.
+2. El endpoint verifica el token con Firebase Auth.
+3. Se valida MIME real y tamaño.
+4. Se guarda el nuevo archivo en cPanel con nombre único.
+5. El endpoint devuelve la URL pública.
+6. El Panel actualiza únicamente ese campo en `siteContent/home`.
+7. Solo después de confirmar Firestore, solicita borrar la URL anterior.
+8. El endpoint de borrado vuelve a leer `siteContent/home` usando el token autenticado y no borra si la URL todavía está referenciada.
 
-`siteContent/home/...`
-
-Publica `storage.rules` si quieres usar upload directo desde el panel. Si Storage no está habilitado, los campos URL siguen funcionando.
+Si falla la subida o Firestore, la imagen anterior se conserva.
+Las URLs antiguas/locales previas a v4 nunca se borran automáticamente porque el endpoint solo acepta URLs bajo `https://assets.nauticahome.com.mx/`.
 
 ## Seguridad
-Publica `firestore.rules` de este paquete en el proyecto `nautica-ca65d`.
-No hay permisos globales abiertos:
-- público: lectura de `siteContent/home`, creación validada de mensajes y flujo existente de newsletter;
-- autenticado: gestión de contenido, mensajes y newsletter.
+El backend nunca acepta rutas físicas desde el navegador.
+Para borrar valida:
+- dominio `ASSET_PUBLIC_BASE`;
+- ausencia de `../`;
+- resolución física dentro de `ASSET_PHYSICAL_BASE`;
+- sesión Firebase válida;
+- ausencia de referencias activas en `siteContent/home`.
+
+Formatos soportados:
+- JPG/JPEG
+- PNG
+- WebP
+- GIF
+- MP4/WebM para el campo de video ya existente
+
+Límites:
+- imágenes: 20 MB
+- video: 150 MB
+
+Opcionalmente puedes definir `NAUTICA_ADMIN_EMAILS` en el hosting como lista separada por comas para limitar los endpoints a emails específicos. Si no se define, se mantiene el mismo criterio actual del Panel/Firestore: usuario Firebase autenticado.
+
+## Paso manual de hosting
+Crear/configurar el subdominio:
+
+`assets.nauticahome.com.mx`
+
+con Document Root recomendado:
+
+`/home/gyu5la0fbzjq/public_html/assets-nautica`
+
+Confirma que PHP ejecutado bajo el usuario de cPanel tenga permiso de escritura sobre esa carpeta.
 
 ## Deploy
-Mantén el flujo Git/cPanel actual de `panel.nauticahome.com.mx`.
+`.cpanel.yml` ahora despliega también `api/`.
+No existe ningún comando que borre `/public_html/assets-nautica`; el storage persistente queda completamente separado del repositorio.
