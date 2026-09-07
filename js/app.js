@@ -34,6 +34,10 @@ const DEFAULT_HOME_CONTENT = {
   },
   utility: {
     message: "¡Envíos gratis a CDMX y Área Metropolitana!",
+    messages: [
+      { enabled: true, text: "¡Envíos gratis a CDMX y Área Metropolitana!" }
+    ],
+    rotationSeconds: 5,
     contactLabel: "Contacto"
   },
   footer: {
@@ -43,8 +47,13 @@ const DEFAULT_HOME_CONTENT = {
     hero: {
       enabled: true,
       imageUrl: "",
+      mobileImageUrl: "",
       useVideo: false,
-      videoUrl: ""
+      videoUrl: "",
+      rotationSeconds: 6,
+      banners: [
+        { enabled: true, imageUrl: "", mobileImageUrl: "", alt: "Nautica Home" }
+      ]
     },
     products: {
       enabled: true,
@@ -114,6 +123,9 @@ const loginButton = document.querySelector("#loginButton");
 const loginError = document.querySelector("#loginError");
 const logoutButton = document.querySelector("#logoutButton");
 const userEmail = document.querySelector("#userEmail");
+const sidebarUserEmail = document.querySelector("#sidebarUserEmail");
+const sidebarToggle = document.querySelector("#sidebarToggle");
+const sidebarBackdrop = document.querySelector("#sidebarBackdrop");
 const viewTitle = document.querySelector("#viewTitle");
 const navButtons = Array.from(document.querySelectorAll(".nav-item[data-view]"));
 const viewSections = Array.from(document.querySelectorAll("[data-panel-view]"));
@@ -164,6 +176,7 @@ if (isConfigured) {
       authView.classList.add("is-hidden");
       panelView.classList.remove("is-hidden");
       userEmail.textContent = user.email || "Usuario";
+      if (sidebarUserEmail) sidebarUserEmail.textContent = user.email || "Usuario";
       await Promise.all([loadNewsletter(), loadContent()]);
       startMessagesListener();
     } else {
@@ -171,6 +184,7 @@ if (isConfigured) {
       panelView.classList.add("is-hidden");
       authView.classList.remove("is-hidden");
       userEmail.textContent = "—";
+      if (sidebarUserEmail) sidebarUserEmail.textContent = "Usuario";
     }
   });
 } else {
@@ -202,10 +216,23 @@ navButtons.forEach((button) => {
   button.addEventListener("click", () => setView(button.dataset.view));
 });
 
+function closeSidebar() {
+  panelView.classList.remove("sidebar-open");
+  sidebarBackdrop?.classList.add("is-hidden");
+}
+sidebarToggle?.addEventListener("click", () => {
+  const open = !panelView.classList.contains("sidebar-open");
+  panelView.classList.toggle("sidebar-open", open);
+  sidebarBackdrop?.classList.toggle("is-hidden", !open);
+});
+sidebarBackdrop?.addEventListener("click", closeSidebar);
+window.addEventListener("resize", () => { if (window.innerWidth > 860) closeSidebar(); });
+
 function setView(view) {
   navButtons.forEach((button) => button.classList.toggle("active", button.dataset.view === view));
   viewSections.forEach((section) => section.classList.toggle("is-hidden", section.dataset.panelView !== view));
   viewTitle.textContent = view === "messages" ? "Mensajes" : view === "webdesign" ? "Web Design" : "Newsletter";
+  if (window.innerWidth <= 860) closeSidebar();
 }
 
 refreshButton.addEventListener("click", loadNewsletter);
@@ -372,8 +399,25 @@ archiveMessageButton.addEventListener("click", async () => {
   }
 });
 
-function renderWebDesignForm(data) {
-  contentCache = deepMerge(structuredClone(DEFAULT_HOME_CONTENT), data || {});
+function normalizeEditorContent(data) {
+  const merged = deepMerge(structuredClone(DEFAULT_HOME_CONTENT), data || {});
+  // Backward compatibility with the v5 single-message and single-hero fields.
+  if (!Array.isArray(data?.utility?.messages) || !data.utility.messages.length) {
+    merged.utility.messages = [{ enabled: true, text: data?.utility?.message || merged.utility.message }];
+  }
+  if (!Array.isArray(data?.sections?.hero?.banners) || !data.sections.hero.banners.length) {
+    merged.sections.hero.banners = [{
+      enabled: true,
+      imageUrl: data?.sections?.hero?.imageUrl || "",
+      mobileImageUrl: data?.sections?.hero?.mobileImageUrl || "",
+      alt: "Nautica Home"
+    }];
+  }
+  return merged;
+}
+
+function renderWebDesignForm(data, reopenKey = "") {
+  contentCache = normalizeEditorContent(data);
   delete contentCache.updatedAt;
   delete contentCache.updatedBy;
   const s = contentCache.sections;
@@ -382,72 +426,98 @@ function renderWebDesignForm(data) {
   const f = contentCache.footer;
 
   webDesignForm.innerHTML = [
-    editorSection("Global / Footer", "global", [
-      textField("Mensaje barra superior", "utility.message", u.message),
+    editorSection("Global / Footer", "global", "Configuración general, redes y barra superior.", [
+      nestedEditor("Mensajes de barra superior", "Agrega varios avisos y define su rotación.", [
+        numberField("Cambio automático (segundos)", "utility.rotationSeconds", u.rotationSeconds || 5, 2, 30),
+        ...u.messages.flatMap((item, index) => [
+          `<div class="repeatable-card" data-repeatable="utility-message" data-index="${index}"><div class="repeatable-card__head"><strong>Mensaje ${index + 1}</strong><button class="text-button danger-text" type="button" data-remove-utility-message="${index}">Eliminar</button></div>`,
+          toggleField("Activo", `utility.messages.${index}.enabled`, item.enabled),
+          textField("Texto", `utility.messages.${index}.text`, item.text),
+          `</div>`
+        ]),
+        `<button class="secondary-button compact add-item-button" type="button" data-add-utility-message>+ Agregar mensaje</button>`
+      ]),
       textField("Label Contacto", "utility.contactLabel", u.contactLabel),
       textField("Facebook URL", "globalSettings.facebookUrl", g.facebookUrl),
       textField("Instagram URL", "globalSettings.instagramUrl", g.instagramUrl),
       textField("WhatsApp URL", "globalSettings.whatsappUrl", g.whatsappUrl),
       textField("Copyright footer", "footer.copyright", f.copyright)
     ]),
-    editorSection("Hero", "hero", [
+    editorSection("Hero", "hero", "Banners desktop y móvil con rotación automática.", [
       toggleField("Sección activa", "sections.hero.enabled", s.hero.enabled),
-      imageField("Imagen del hero", "sections.hero.imageUrl", s.hero.imageUrl, "hero"),
-      toggleField("Usar video", "sections.hero.useVideo", s.hero.useVideo),
-      imageField("URL / video del hero", "sections.hero.videoUrl", s.hero.videoUrl, "hero-video", "video/*")
-    ]),
-    editorSection("Productos / Categorías", "products", [
-      toggleField("Sección activa", "sections.products.enabled", s.products.enabled),
-      ...s.products.items.flatMap((item, index) => [
-        `<div class="editor-subheading">Categoría ${index + 1}</div>`,
-        toggleField("Activa", `sections.products.items.${index}.enabled`, item.enabled),
-        textField("Nombre", `sections.products.items.${index}.label`, item.label),
-        imageField("Imagen", `sections.products.items.${index}.imageUrl`, item.imageUrl, `products-${index}`),
-        textField("Link", `sections.products.items.${index}.link`, item.link)
+      numberField("Cambio automático (segundos)", "sections.hero.rotationSeconds", s.hero.rotationSeconds || 6, 3, 30),
+      ...s.hero.banners.flatMap((banner, index) => [
+        nestedEditor(`Banner ${index + 1}`, "Cada banner usa un archivo específico para desktop y otro para móvil.", [
+          `<div class="repeatable-card repeatable-card--plain" data-repeatable="hero-banner" data-index="${index}">`,
+          `<div class="repeatable-card__head"><strong>Configuración</strong>${s.hero.banners.length > 1 ? `<button class="text-button danger-text" type="button" data-remove-hero-banner="${index}">Eliminar banner</button>` : ""}</div>`,
+          toggleField("Activo", `sections.hero.banners.${index}.enabled`, banner.enabled),
+          textField("Alt text", `sections.hero.banners.${index}.alt`, banner.alt || "Nautica Home"),
+          imageField("Banner desktop", `sections.hero.banners.${index}.imageUrl`, banner.imageUrl, `hero`, "image/*", "1920 × 620 px", "desktop"),
+          imageField("Banner móvil", `sections.hero.banners.${index}.mobileImageUrl`, banner.mobileImageUrl, `hero`, "image/*", "1080 × 1080 px", "mobile"),
+          `</div>`
+        ])
+      ]),
+      `<button class="secondary-button compact add-item-button" type="button" data-add-hero-banner>+ Agregar banner</button>`,
+      nestedEditor("Video opcional", "Mantiene compatibilidad con el video existente del hero.", [
+        toggleField("Usar video", "sections.hero.useVideo", s.hero.useVideo),
+        imageField("Video del hero", "sections.hero.videoUrl", s.hero.videoUrl, "hero-video", "video/*", "MP4/WebM · máx. 150 MB")
       ])
     ]),
-    editorSection("Nosotros", "about", [
+    editorSection("Productos / Categorías", "products", "Categorías visibles en el carrusel de productos.", [
+      toggleField("Sección activa", "sections.products.enabled", s.products.enabled),
+      ...s.products.items.flatMap((item, index) => [
+        nestedEditor(`Categoría ${index + 1} · ${escapeHtml(item.label || "Sin nombre")}`, "Imagen, nombre, visibilidad y destino.", [
+          toggleField("Activa", `sections.products.items.${index}.enabled`, item.enabled),
+          textField("Nombre", `sections.products.items.${index}.label`, item.label),
+          imageField("Imagen", `sections.products.items.${index}.imageUrl`, item.imageUrl, `products-${index}`, "image/*", "1800 × 1000 px · relación 1.8:1"),
+          textField("Link", `sections.products.items.${index}.link`, item.link)
+        ])
+      ])
+    ]),
+    editorSection("Nosotros", "about", "Contenido editorial de la sección Nosotros.", [
       toggleField("Sección activa", "sections.about.enabled", s.about.enabled),
       textField("Eyebrow", "sections.about.kicker", s.about.kicker),
       textareaField("Título", "sections.about.title", s.about.title),
       textareaField("Párrafo 1", "sections.about.paragraph1", s.about.paragraph1),
       textareaField("Párrafo 2", "sections.about.paragraph2", s.about.paragraph2),
-      imageField("Imagen", "sections.about.imageUrl", s.about.imageUrl, "about"),
+      imageField("Imagen", "sections.about.imageUrl", s.about.imageUrl, "about", "image/*", "1600 × 1200 px · relación 4:3"),
       textField("CTA", "sections.about.ctaLabel", s.about.ctaLabel),
       textField("Link CTA", "sections.about.ctaHref", s.about.ctaHref)
     ]),
-    editorSection("Tiendas", "retailers", [
+    editorSection("Tiendas", "retailers", "Textos y logos de distribuidores.", [
       toggleField("Sección activa", "sections.retailers.enabled", s.retailers.enabled),
       textField("Eyebrow", "sections.retailers.kicker", s.retailers.kicker),
       textField("Título", "sections.retailers.title", s.retailers.title),
       textareaField("Descripción", "sections.retailers.copy", s.retailers.copy),
       ...s.retailers.items.flatMap((item, index) => [
-        `<div class="editor-subheading">Tienda ${index + 1}</div>`,
-        toggleField("Activa", `sections.retailers.items.${index}.enabled`, item.enabled),
-        textField("Nombre", `sections.retailers.items.${index}.name`, item.name),
-        imageField("Logo", `sections.retailers.items.${index}.logoUrl`, item.logoUrl, `retailer-${index}`)
+        nestedEditor(`Tienda ${index + 1} · ${escapeHtml(item.name || "Sin nombre")}`, "Logo y visibilidad del retailer.", [
+          toggleField("Activa", `sections.retailers.items.${index}.enabled`, item.enabled),
+          textField("Nombre", `sections.retailers.items.${index}.name`, item.name),
+          imageField("Logo", `sections.retailers.items.${index}.logoUrl`, item.logoUrl, `retailer-${index}`, "image/*", "1200 × 600 px · PNG/WebP recomendado")
+        ])
       ])
     ]),
-    editorSection("Inspiración", "inspiration", [
+    editorSection("Inspiración", "inspiration", "Galería visual y textos de inspiración.", [
       toggleField("Sección activa", "sections.inspiration.enabled", s.inspiration.enabled),
       textField("Eyebrow", "sections.inspiration.kicker", s.inspiration.kicker),
       textField("Título", "sections.inspiration.title", s.inspiration.title),
       textareaField("Descripción", "sections.inspiration.copy", s.inspiration.copy),
       ...s.inspiration.items.flatMap((item, index) => [
-        `<div class="editor-subheading">Imagen ${index + 1}</div>`,
-        toggleField("Activa", `sections.inspiration.items.${index}.enabled`, item.enabled),
-        imageField("Imagen", `sections.inspiration.items.${index}.imageUrl`, item.imageUrl, `inspiration-${index}`)
+        nestedEditor(`Imagen ${index + 1}`, "Imagen individual de la galería.", [
+          toggleField("Activa", `sections.inspiration.items.${index}.enabled`, item.enabled),
+          imageField("Imagen", `sections.inspiration.items.${index}.imageUrl`, item.imageUrl, `inspiration-${index}`, "image/*", "1200 × 1200 px · cuadrada")
+        ])
       ])
     ]),
-    editorSection("Newsletter", "newsletter", [
+    editorSection("Newsletter", "newsletter", "Contenido visual y editorial del newsletter.", [
       toggleField("Sección activa", "sections.newsletter.enabled", s.newsletter.enabled),
       textField("Eyebrow", "sections.newsletter.kicker", s.newsletter.kicker),
       textareaField("Título", "sections.newsletter.title", s.newsletter.title),
       textareaField("Descripción", "sections.newsletter.copy", s.newsletter.copy),
       textareaField("Texto legal", "sections.newsletter.legal", s.newsletter.legal),
-      imageField("Imagen", "sections.newsletter.imageUrl", s.newsletter.imageUrl, "newsletter")
+      imageField("Imagen", "sections.newsletter.imageUrl", s.newsletter.imageUrl, "newsletter", "image/*", "1600 × 1100 px")
     ]),
-    editorSection("Contacto", "contact", [
+    editorSection("Contacto", "contact", "Contenido de la sección y formulario de contacto.", [
       toggleField("Sección activa", "sections.contact.enabled", s.contact.enabled),
       textField("Eyebrow", "sections.contact.kicker", s.contact.kicker),
       textareaField("Título", "sections.contact.title", s.contact.title),
@@ -455,53 +525,138 @@ function renderWebDesignForm(data) {
     ])
   ].join("");
 
-  webDesignForm.querySelectorAll("[data-upload-button]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const field = button.closest(".image-field")?.querySelector("input[type='file']");
-      field?.click();
+  if (reopenKey) webDesignForm.querySelector(`[data-section-key="${CSS.escape(reopenKey)}"]`)?.classList.add("is-open");
+  bindWebDesignControls();
+}
+
+function bindWebDesignControls() {
+  webDesignForm.querySelectorAll("[data-toggle-editor-section]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      if (event.target.closest("[data-reset-section]")) return;
+      button.closest(".editor-section")?.classList.toggle("is-open");
     });
   });
-  webDesignForm.querySelectorAll("input[type='file'][data-upload-path]").forEach((input) => {
-    input.addEventListener("change", () => uploadAsset(input));
+  webDesignForm.querySelectorAll("[data-toggle-nested]").forEach((button) => {
+    button.addEventListener("click", () => button.closest(".nested-editor")?.classList.toggle("is-open"));
+  });
+  webDesignForm.querySelectorAll("[data-upload-button]").forEach((button) => {
+    button.addEventListener("click", () => button.closest(".image-field")?.querySelector("input[type='file']")?.click());
+  });
+  webDesignForm.querySelectorAll("input[type='file'][data-upload-path]").forEach((input) => input.addEventListener("change", () => uploadAsset(input)));
+
+  webDesignForm.querySelectorAll("[data-reset-section]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const key = button.dataset.resetSection;
+      const current = collectEditorData();
+      if (key === "global") {
+        current.globalSettings = structuredClone(DEFAULT_HOME_CONTENT.globalSettings);
+        current.utility = structuredClone(DEFAULT_HOME_CONTENT.utility);
+        current.footer = structuredClone(DEFAULT_HOME_CONTENT.footer);
+      } else if (DEFAULT_HOME_CONTENT.sections[key]) {
+        current.sections[key] = structuredClone(DEFAULT_HOME_CONTENT.sections[key]);
+      }
+      renderWebDesignForm(current, key);
+      markContentDirty("Vista default aplicada · guarda para publicar");
+    });
+  });
+
+  webDesignForm.querySelector("[data-add-utility-message]")?.addEventListener("click", () => {
+    const data = collectEditorData();
+    data.utility.messages = Array.isArray(data.utility.messages) ? data.utility.messages : [];
+    data.utility.messages.push({ enabled: true, text: "Nuevo mensaje" });
+    renderWebDesignForm(data, "global");
+    webDesignForm.querySelector('[data-section-key="global"] .nested-editor')?.classList.add("is-open");
+    markContentDirty();
+  });
+  webDesignForm.querySelectorAll("[data-remove-utility-message]").forEach((button) => button.addEventListener("click", () => {
+    const data = collectEditorData();
+    if ((data.utility.messages?.length || 0) <= 1) return;
+    data.utility.messages.splice(Number(button.dataset.removeUtilityMessage), 1);
+    renderWebDesignForm(data, "global");
+    markContentDirty();
+  }));
+
+  webDesignForm.querySelector("[data-add-hero-banner]")?.addEventListener("click", () => {
+    const data = collectEditorData();
+    data.sections.hero.banners = Array.isArray(data.sections.hero.banners) ? data.sections.hero.banners : [];
+    data.sections.hero.banners.push({ enabled: true, imageUrl: "", mobileImageUrl: "", alt: "Nautica Home" });
+    renderWebDesignForm(data, "hero");
+    markContentDirty();
+  });
+  webDesignForm.querySelectorAll("[data-remove-hero-banner]").forEach((button) => button.addEventListener("click", () => {
+    const data = collectEditorData();
+    if ((data.sections.hero.banners?.length || 0) <= 1) return;
+    data.sections.hero.banners.splice(Number(button.dataset.removeHeroBanner), 1);
+    renderWebDesignForm(data, "hero");
+    markContentDirty();
+  }));
+
+  webDesignForm.querySelectorAll("input[data-path],textarea[data-path]").forEach((field) => {
+    field.addEventListener("input", () => markContentDirty());
+    field.addEventListener("change", () => markContentDirty());
   });
 }
 
-function editorSection(title, key, fields) {
-  return `<details class="editor-section" open>
-    <summary><span>${escapeHtml(title)}</span><span class="summary-hint">Editar</span></summary>
-    <div class="editor-grid" data-editor-section="${escapeHtml(key)}">${fields.join("")}</div>
-  </details>`;
+function markContentDirty(message = "Cambios sin guardar") {
+  contentState.classList.remove("error", "success");
+  contentState.textContent = message;
+}
+
+function editorSection(title, key, description, fields) {
+  return `<section class="editor-section" data-section-key="${escapeHtml(key)}">
+    <div class="editor-section__header" data-toggle-editor-section role="button" tabindex="0" aria-label="Editar ${escapeAttr(title)}">
+      <div class="editor-section__identity"><span class="editor-section__icon">${sectionIcon(key)}</span><div><strong>${escapeHtml(title)}</strong><small>${escapeHtml(description)}</small></div></div>
+      <div class="editor-section__controls"><button class="text-button" type="button" data-reset-section="${escapeHtml(key)}">Reset</button><svg class="editor-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></div>
+    </div>
+    <div class="editor-section__body"><div class="editor-grid" data-editor-section="${escapeHtml(key)}">${fields.join("")}</div></div>
+  </section>`;
+}
+
+function nestedEditor(title, description, fields) {
+  return `<section class="nested-editor"><button class="nested-editor__header" type="button" data-toggle-nested><span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(description)}</small></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button><div class="nested-editor__body"><div class="editor-grid">${fields.join("")}</div></div></section>`;
+}
+
+function sectionIcon(key) {
+  const paths = {
+    global: '<path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="8"/>',
+    hero: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 15 5-5 4 4 3-3 6 6"/>',
+    products: '<path d="M4 7h16v13H4zM7 7V4h10v3"/>',
+    about: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+    retailers: '<path d="M3 9h18l-2-5H5zM5 9v11h14V9M9 20v-6h6v6"/>',
+    inspiration: '<path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/><circle cx="12" cy="12" r="4"/>',
+    newsletter: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
+    contact: '<path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/>'
+  };
+  return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[key] || paths.global}</svg>`;
 }
 
 function textField(label, path, value) {
   return `<label class="editor-field"><span>${escapeHtml(label)}</span><input type="text" data-path="${escapeHtml(path)}" value="${escapeAttr(value ?? "")}" /></label>`;
 }
-
+function numberField(label, path, value, min, max) {
+  return `<label class="editor-field"><span>${escapeHtml(label)}</span><input type="number" min="${min}" max="${max}" step="1" data-path="${escapeHtml(path)}" value="${escapeAttr(value ?? min)}" /></label>`;
+}
 function textareaField(label, path, value) {
   return `<label class="editor-field editor-field-wide"><span>${escapeHtml(label)}</span><textarea rows="3" data-path="${escapeHtml(path)}">${escapeHtml(value ?? "")}</textarea></label>`;
 }
-
 function toggleField(label, path, value) {
-  return `<label class="editor-toggle"><input type="checkbox" data-path="${escapeHtml(path)}" ${value !== false ? "checked" : ""} /><span>${escapeHtml(label)}</span></label>`;
+  return `<label class="editor-toggle"><span>${escapeHtml(label)}</span><span class="toggle-control"><input type="checkbox" data-path="${escapeHtml(path)}" ${value !== false ? "checked" : ""} /><span class="toggle-track"></span></span></label>`;
 }
-
-function imageField(label, path, value, uploadKey, accept = "image/*") {
+function imageField(label, path, value, uploadKey, accept = "image/*", sizeHint = "", variant = "") {
   const current = String(value ?? "");
   const isVideo = accept.startsWith("video/");
   const preview = current
-    ? (isVideo
-      ? `<video class="asset-preview" src="${escapeAttr(current)}" muted playsinline preload="metadata"></video>`
-      : `<img class="asset-preview" src="${escapeAttr(current)}" alt="" loading="lazy" />`)
+    ? (isVideo ? `<video class="asset-preview" src="${escapeAttr(current)}" muted playsinline preload="metadata"></video>` : `<img class="asset-preview" src="${escapeAttr(current)}" alt="" loading="lazy" />`)
     : `<div class="asset-preview asset-preview-empty">Sin archivo</div>`;
-  return `<div class="editor-field editor-field-wide image-field">
-    <span>${escapeHtml(label)}</span>
-    <div class="asset-preview-wrap" data-asset-preview>${preview}</div>
-    <div class="image-input-row">
+  return `<div class="editor-field editor-field-wide image-field${variant ? ` image-field--${variant}` : ""}">
+    <div class="image-field__label"><span>${escapeHtml(label)}</span>${sizeHint ? `<small class="image-size-hint">Tamaño recomendado: ${escapeHtml(sizeHint)}</small>` : ""}</div>
+    <div class="image-field__content"><div class="asset-preview-wrap" data-asset-preview>${preview}</div><div class="image-field__fields">
       <input type="url" data-path="${escapeHtml(path)}" value="${escapeAttr(current)}" placeholder="https://assets.nauticahome.com.mx/…" />
       <button class="secondary-button compact" type="button" data-upload-button>Subir / reemplazar</button>
       <input class="file-input" type="file" accept="${escapeAttr(accept)}" data-upload-path="${escapeHtml(path)}" data-upload-key="${escapeHtml(uploadKey)}" />
-    </div>
-    <small>La URL guardada en Firebase es la fuente de verdad. Las nuevas subidas se almacenan en cPanel.</small>
+      <small>La URL guardada en Firebase es la fuente de verdad. Las nuevas subidas se almacenan en cPanel.</small>
+    </div></div>
   </div>`;
 }
 
@@ -532,6 +687,13 @@ saveContentButton.addEventListener("click", async () => {
   contentState.textContent = "Guardando…";
   try {
     const data = collectEditorData();
+    // Keep legacy single fields synchronized so older public builds remain compatible.
+    data.utility.message = data.utility.messages?.find((item) => item?.enabled !== false && item?.text)?.text || data.utility.message || "";
+    const firstBanner = data.sections?.hero?.banners?.find((item) => item?.enabled !== false) || data.sections?.hero?.banners?.[0];
+    if (firstBanner) {
+      data.sections.hero.imageUrl = firstBanner.imageUrl || data.sections.hero.imageUrl || "";
+      data.sections.hero.mobileImageUrl = firstBanner.mobileImageUrl || data.sections.hero.mobileImageUrl || "";
+    }
     data.updatedAt = serverTimestamp();
     data.updatedBy = auth?.currentUser?.email || "authenticated-user";
     await setDoc(doc(db, SITE_CONTENT_COLLECTION, SITE_CONTENT_HOME_DOC), data, { merge: false });
@@ -550,7 +712,7 @@ saveContentButton.addEventListener("click", async () => {
 function collectEditorData() {
   const data = structuredClone(contentCache || DEFAULT_HOME_CONTENT);
   webDesignForm.querySelectorAll("[data-path]").forEach((field) => {
-    const value = field.type === "checkbox" ? field.checked : field.value;
+    const value = field.type === "checkbox" ? field.checked : field.type === "number" ? Number(field.value) : field.value;
     setByPath(data, field.dataset.path, value);
   });
   delete data.updatedAt;
@@ -605,15 +767,21 @@ async function uploadAsset(input) {
     }
     uploadedUrl = uploadResult.url;
 
-    // Persist ONLY this asset field (plus metadata), so unrelated unsaved form
-    // edits are not accidentally committed by an image replacement.
-    await updateDoc(doc(db, SITE_CONTENT_COLLECTION, SITE_CONTENT_HOME_DOC), {
-      [path]: uploadedUrl,
-      updatedAt: serverTimestamp(),
-      updatedBy: auth.currentUser.email || "authenticated-user"
-    });
+    // Persist the narrowest safe Firestore field. Firestore cannot update a
+    // single array element by numeric dotted path, so image fields inside
+    // arrays save only their containing array. All other images still save
+    // only the exact field. This keeps unrelated unsaved edits untouched.
+    const nextContent = structuredClone(contentCache);
+    setByPath(nextContent, path, uploadedUrl);
+    const arrayRoot = arrayRootForPath(path);
+    const patch = arrayRoot
+      ? { [arrayRoot]: getByPath(nextContent, arrayRoot) }
+      : { [path]: uploadedUrl };
+    patch.updatedAt = serverTimestamp();
+    patch.updatedBy = auth.currentUser.email || "authenticated-user";
+    await updateDoc(doc(db, SITE_CONTENT_COLLECTION, SITE_CONTENT_HOME_DOC), patch);
 
-    setByPath(contentCache, path, uploadedUrl);
+    contentCache = nextContent;
     if (urlInput) urlInput.value = uploadedUrl;
     renderAssetPreview(previewWrap, uploadedUrl, input.accept);
     if (oldHint) oldHint.textContent = "Guardado";
@@ -679,6 +847,12 @@ async function checkAssetHealth(token) {
     throw new Error(result?.error || `El storage de cPanel no está disponible (${response.status}).`);
   }
   return result;
+}
+
+function arrayRootForPath(path) {
+  const parts = String(path || "").split(".");
+  const index = parts.findIndex((part) => /^\d+$/.test(part));
+  return index > 0 ? parts.slice(0, index).join(".") : "";
 }
 
 function getByPath(target, path) {

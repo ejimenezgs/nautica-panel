@@ -25,6 +25,8 @@
     </section>
 
     <section id="panelView" class="panel-view is-hidden">
+      <button id="sidebarToggle" class="sidebar-toggle" type="button" aria-label="Abrir navegación"><span></span><span></span><span></span></button>
+      <button id="sidebarBackdrop" class="sidebar-backdrop is-hidden" type="button" aria-label="Cerrar navegación"></button>
       <aside class="sidebar">
         <div>
           <div class="panel-brand">NAUTICA</div>
@@ -32,15 +34,15 @@
         </div>
 
         <nav class="nav-list" aria-label="Navegación principal">
-          <button class="nav-item active" data-view="newsletter">Newsletter</button>
-          <button class="nav-item" data-view="messages">Mensajes <span id="messageBadge" class="nav-badge is-hidden">0</span></button>
-          <button class="nav-item" data-view="webdesign">Web Design</button>
-          <button class="nav-item disabled" disabled>Productos <span>Próximamente</span></button>
-          <button class="nav-item disabled" disabled>Ventas <span>Próximamente</span></button>
-          <button class="nav-item disabled" disabled>Leads <span>Próximamente</span></button>
+          <button class="nav-item active" data-view="newsletter"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4z"/><path d="m4 7 8 6 8-6"/></svg><span class="nav-label">Newsletter</span></button>
+          <button class="nav-item" data-view="messages"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/></svg><span class="nav-label">Mensajes</span><span id="messageBadge" class="nav-badge is-hidden">0</span></button>
+          <button class="nav-item" data-view="webdesign"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg><span class="nav-label">Web Design</span></button>
+          <button class="nav-item disabled" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h12l2 5H4zM5 7v15h14V7M9 11h6"/></svg><span class="nav-label">Productos</span><span class="nav-soon">Próximamente</span></button>
+          <button class="nav-item disabled" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18M7 16l4-5 4 3 5-7"/></svg><span class="nav-label">Ventas</span><span class="nav-soon">Próximamente</span></button>
+          <button class="nav-item disabled" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="7" r="4"/><path d="M2 21v-2a6 6 0 0 1 6-6h2a6 6 0 0 1 6 6v2M19 8v6M16 11h6"/></svg><span class="nav-label">Leads</span><span class="nav-soon">Próximamente</span></button>
         </nav>
 
-        <button id="logoutButton" class="logout-button">Cerrar sesión</button>
+        <div class="sidebar-footer"><div class="sidebar-user"><span class="sidebar-user-dot"></span><span id="sidebarUserEmail">Usuario</span></div><button id="logoutButton" class="logout-button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3M21 3v18h-6"/></svg><span>Cerrar sesión</span></button></div>
       </aside>
 
       <section class="content-area">

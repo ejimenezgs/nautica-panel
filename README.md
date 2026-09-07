@@ -94,3 +94,14 @@ No existe ningún comando que borre `/public_html/assets-nautica`; el storage pe
 - Supports Firebase token transport through `Authorization`, `X-Firebase-Token`, and multipart fallback for shared-hosting/CGI configurations that strip the standard Authorization header.
 - Adds browser-side timeouts for health, upload, and delete requests.
 - Does not change Firestore content paths or the public asset URL format.
+
+
+## v6 — interfaz Casa Glick + contenido rotativo
+
+- Web Design adopta el lenguaje visual y los accordions cerrados por defecto de Casa Glick Panel.
+- Se conserva sin cambios la autenticación Firebase, Firestore, endpoints PHP y storage persistente en cPanel.
+- Barra superior: soporta múltiples mensajes activos y `rotationSeconds`.
+- Hero: soporta múltiples banners, cada uno con imagen desktop, imagen móvil y alt text.
+- Cada sección incluye Reset para volver a los fallbacks de la versión estable antes de guardar.
+- Los campos de imagen muestran el tamaño recomendado dentro del editor.
+- El uploader y la eliminación segura siguen usando `api/upload-website-asset.php` y `api/delete-website-asset.php`.
