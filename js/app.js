@@ -7,6 +7,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
 import {
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -23,8 +24,13 @@ import {
   NEWSLETTER_COLLECTION,
   CONTACT_COLLECTION,
   SITE_CONTENT_COLLECTION,
-  SITE_CONTENT_HOME_DOC
+  SITE_CONTENT_HOME_DOC,
+  PRODUCT_OVERRIDES_COLLECTION
 } from "./firebase-config.js";
+import {
+  INVENTORY_API_URL,
+  fetchInventoryProducts
+} from "./inventory-api.js";
 
 const DEFAULT_HOME_CONTENT = {
   globalSettings: {
@@ -136,6 +142,51 @@ const newsletterMessage = document.querySelector("#newsletterMessage");
 const subscriberCount = document.querySelector("#subscriberCount");
 const todayCount = document.querySelector("#todayCount");
 
+const refreshProductsButton = document.querySelector("#refreshProductsButton");
+const retryProductsButton = document.querySelector("#retryProductsButton");
+const productSearch = document.querySelector("#productSearch");
+const productCategoryFilter = document.querySelector("#productCategoryFilter");
+const productStatusFilter = document.querySelector("#productStatusFilter");
+const productsLoading = document.querySelector("#productsLoading");
+const productsError = document.querySelector("#productsError");
+const productsErrorText = document.querySelector("#productsErrorText");
+const productsTableWrap = document.querySelector("#productsTableWrap");
+const productsBody = document.querySelector("#productsBody");
+const productsPageInfo = document.querySelector("#productsPageInfo");
+const productsPrevPage = document.querySelector("#productsPrevPage");
+const productsNextPage = document.querySelector("#productsNextPage");
+const productTotalCount = document.querySelector("#productTotalCount");
+const productAvailableCount = document.querySelector("#productAvailableCount");
+const productLowStockCount = document.querySelector("#productLowStockCount");
+const productOutCount = document.querySelector("#productOutCount");
+
+const productDrawer = document.querySelector("#productDrawer");
+const productDrawerBackdrop = document.querySelector("#productDrawerBackdrop");
+const closeProductDrawerButton = document.querySelector("#closeProductDrawer");
+const productDrawerTitle = document.querySelector("#productDrawerTitle");
+const productDrawerCode = document.querySelector("#productDrawerCode");
+const productDrawerImage = document.querySelector("#productDrawerImage");
+const productApiSku = document.querySelector("#productApiSku");
+const productApiName = document.querySelector("#productApiName");
+const productApiPrice = document.querySelector("#productApiPrice");
+const productApiStock = document.querySelector("#productApiStock");
+const productApiCategory = document.querySelector("#productApiCategory");
+const productApiSubcategory = document.querySelector("#productApiSubcategory");
+const productCustomName = document.querySelector("#productCustomName");
+const productPromoPrice = document.querySelector("#productPromoPrice");
+const productCustomCategory = document.querySelector("#productCustomCategory");
+const productCustomSubcategory = document.querySelector("#productCustomSubcategory");
+const productCustomDescription = document.querySelector("#productCustomDescription");
+const productImageUrl = document.querySelector("#productImageUrl");
+const productImageAlt = document.querySelector("#productImageAlt");
+const productVisible = document.querySelector("#productVisible");
+const productFeatured = document.querySelector("#productFeatured");
+const productUploadButton = document.querySelector("#productUploadButton");
+const productImageFile = document.querySelector("#productImageFile");
+const saveProductOverrideButton = document.querySelector("#saveProductOverride");
+const resetProductOverrideButton = document.querySelector("#resetProductOverride");
+const productSaveMessage = document.querySelector("#productSaveMessage");
+
 const messageBadge = document.querySelector("#messageBadge");
 const unreadCount = document.querySelector("#unreadCount");
 const messageCount = document.querySelector("#messageCount");
@@ -165,6 +216,15 @@ let messagesCache = [];
 let messageFilter = "inbox";
 let selectedMessageId = null;
 let contentCache = structuredClone(DEFAULT_HOME_CONTENT);
+
+const PRODUCT_PAGE_SIZE = 50;
+let productsCache = [];
+let productsFiltered = [];
+let productOverrides = {};
+let productPage = 1;
+let productsLoaded = false;
+let productsLoadingNow = false;
+let selectedProductCode = null;
 
 if (isConfigured) {
   const app = initializeApp(firebaseConfig);
@@ -231,7 +291,9 @@ window.addEventListener("resize", () => { if (window.innerWidth > 860) closeSide
 function setView(view) {
   navButtons.forEach((button) => button.classList.toggle("active", button.dataset.view === view));
   viewSections.forEach((section) => section.classList.toggle("is-hidden", section.dataset.panelView !== view));
-  viewTitle.textContent = view === "messages" ? "Mensajes" : view === "webdesign" ? "Web Design" : "Newsletter";
+  const titles = { newsletter: "Newsletter", messages: "Mensajes", webdesign: "Web Design", products: "Productos" };
+  viewTitle.textContent = titles[view] || "Nautica Panel";
+  if (view === "products" && !productsLoaded && !productsLoadingNow) loadProducts();
   if (window.innerWidth <= 860) closeSidebar();
 }
 
@@ -274,6 +336,405 @@ function renderNewsletter(rows) {
     </tr>
   `).join("");
 }
+
+
+function overrideDocId(code) {
+  return encodeURIComponent(String(code || "").trim());
+}
+
+function stockState(stock) {
+  const value = Number(stock) || 0;
+  if (value <= 0) return { key: "out", label: "Agotado", rank: 2 };
+  if (value <= 4) return { key: "low", label: "Poco stock", rank: 1 };
+  return { key: "available", label: "Disponible", rank: 0 };
+}
+
+function parseOptionalMoney(value) {
+  if (value === "" || value === null || value === undefined) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function money(value) {
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) return "—";
+  return new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 2 }).format(Number(value));
+}
+
+function effectiveProduct(product) {
+  const override = productOverrides[product.code] || {};
+  const overridePromo = parseOptionalMoney(override.promoPrice);
+  const apiPromo = parseOptionalMoney(product.promoPrice);
+  const promoPrice = overridePromo ?? apiPromo;
+  return {
+    ...product,
+    displayName: String(override.customName || product.name || product.code),
+    displayDescription: String(override.customDescription || product.description || ""),
+    displayCategory: String(override.customCategory || product.category || ""),
+    displaySubcategory: String(override.customSubcategory || product.subcategory || ""),
+    displayImageUrl: String(override.imageUrl || product.imageUrl || ""),
+    imageAlt: String(override.imageAlt || ""),
+    featured: Boolean(override.featured),
+    hidden: Boolean(override.hidden),
+    displayPromoPrice: promoPrice,
+    hasPromotion: promoPrice !== null && product.price !== null && Number(promoPrice) < Number(product.price),
+    override
+  };
+}
+
+async function loadProductOverrides() {
+  if (!db) return {};
+  const snapshot = await getDocs(collection(db, PRODUCT_OVERRIDES_COLLECTION));
+  const map = {};
+  snapshot.docs.forEach((item) => {
+    const data = item.data() || {};
+    let code = String(data.code || "").trim();
+    if (!code) {
+      try { code = decodeURIComponent(item.id); } catch { code = item.id; }
+    }
+    if (code) map[code] = { ...data, id: item.id };
+  });
+  return map;
+}
+
+async function loadProducts() {
+  if (!db || productsLoadingNow) return;
+  productsLoadingNow = true;
+  productsLoading?.classList.remove("is-hidden");
+  productsError?.classList.add("is-hidden");
+  productsTableWrap?.classList.add("is-hidden");
+  refreshProductsButton.disabled = true;
+  retryProductsButton.disabled = true;
+  try {
+    const [apiProducts, overrides] = await Promise.all([
+      fetchInventoryProducts(),
+      loadProductOverrides()
+    ]);
+    productsCache = apiProducts;
+    productOverrides = overrides;
+    productsLoaded = true;
+    productPage = 1;
+    rebuildProductCategoryFilter();
+    applyProductFilters();
+  } catch (error) {
+    console.error("Could not load inventory", error);
+    productsLoaded = false;
+    productsCache = [];
+    productsFiltered = [];
+    productsErrorText.textContent = `${error?.message || "Error desconocido"} Endpoint: ${INVENTORY_API_URL}`;
+    productsError?.classList.remove("is-hidden");
+    productsBody.innerHTML = "";
+    renderProductStats();
+    renderProductPagination();
+  } finally {
+    productsLoadingNow = false;
+    productsLoading?.classList.add("is-hidden");
+    refreshProductsButton.disabled = false;
+    retryProductsButton.disabled = false;
+  }
+}
+
+function rebuildProductCategoryFilter() {
+  if (!productCategoryFilter) return;
+  const current = productCategoryFilter.value || "all";
+  const categories = [...new Set(productsCache.map((product) => effectiveProduct(product).displayCategory).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
+  productCategoryFilter.innerHTML = `<option value="all">Todas</option>${categories.map((category) => `<option value="${escapeAttr(category)}">${escapeHtml(category)}</option>`).join("")}`;
+  productCategoryFilter.value = categories.includes(current) ? current : "all";
+}
+
+function applyProductFilters() {
+  const queryText = String(productSearch?.value || "").trim().toLocaleLowerCase("es");
+  const category = productCategoryFilter?.value || "all";
+  const status = productStatusFilter?.value || "all";
+
+  productsFiltered = productsCache.map(effectiveProduct).filter((product) => {
+    const haystack = [product.name, product.displayName, product.code, product.category, product.displayCategory, product.subcategory, product.displaySubcategory]
+      .filter(Boolean).join(" ").toLocaleLowerCase("es");
+    if (queryText && !haystack.includes(queryText)) return false;
+    if (category !== "all" && product.displayCategory !== category) return false;
+    const stock = stockState(product.stock);
+    if (status === "available" && stock.key !== "available") return false;
+    if (status === "low" && stock.key !== "low") return false;
+    if (status === "out" && stock.key !== "out") return false;
+    if (status === "promo" && !product.hasPromotion) return false;
+    if (status === "hidden" && !product.hidden) return false;
+    return true;
+  }).sort((a, b) => {
+    const rankDiff = stockState(a.stock).rank - stockState(b.stock).rank;
+    if (rankDiff) return rankDiff;
+    return a.displayName.localeCompare(b.displayName, "es", { sensitivity: "base", numeric: true });
+  });
+
+  const maxPage = Math.max(1, Math.ceil(productsFiltered.length / PRODUCT_PAGE_SIZE));
+  productPage = Math.min(productPage, maxPage);
+  renderProductStats();
+  renderProductsTable();
+  renderProductPagination();
+}
+
+function renderProductStats() {
+  const views = productsCache.map(effectiveProduct);
+  productTotalCount.textContent = String(views.length);
+  productAvailableCount.textContent = String(views.filter((product) => stockState(product.stock).key === "available").length);
+  productLowStockCount.textContent = String(views.filter((product) => stockState(product.stock).key === "low").length);
+  productOutCount.textContent = String(views.filter((product) => stockState(product.stock).key === "out").length);
+}
+
+function productPriceMarkup(product) {
+  if (product.hasPromotion) return `<strong class="product-price product-price--promo">${escapeHtml(money(product.displayPromoPrice))}</strong><del>${escapeHtml(money(product.price))}</del>`;
+  return `<strong class="product-price">${escapeHtml(money(product.price))}</strong>`;
+}
+
+function renderProductsTable() {
+  if (!productsBody) return;
+  productsTableWrap?.classList.remove("is-hidden");
+  if (!productsCache.length) {
+    productsBody.innerHTML = `<tr><td colspan="8" class="empty-state">No hay productos disponibles.</td></tr>`;
+    return;
+  }
+  if (!productsFiltered.length) {
+    productsBody.innerHTML = `<tr><td colspan="8" class="empty-state">No hay resultados para esta búsqueda.</td></tr>`;
+    return;
+  }
+  const start = (productPage - 1) * PRODUCT_PAGE_SIZE;
+  const pageRows = productsFiltered.slice(start, start + PRODUCT_PAGE_SIZE);
+  productsBody.innerHTML = pageRows.map((product) => {
+    const stock = stockState(product.stock);
+    const category = [product.displayCategory, product.displaySubcategory].filter(Boolean).join(" / ") || "—";
+    const image = product.displayImageUrl;
+    return `<tr>
+      <td>${image ? `<img class="product-thumb" src="${escapeAttr(image)}" alt="${escapeAttr(product.imageAlt || product.displayName)}" loading="lazy">` : `<div class="product-thumb product-thumb--empty">—</div>`}</td>
+      <td><strong class="product-sku">${escapeHtml(product.code)}</strong></td>
+      <td><div class="product-name-cell"><strong>${escapeHtml(product.displayName)}</strong>${product.customName ? "" : ""}<small>${escapeHtml(product.displayDescription || product.name || "")}</small></div></td>
+      <td>${escapeHtml(category)}</td>
+      <td><div class="product-price-cell">${productPriceMarkup(product)}</div></td>
+      <td><span class="stock-pill stock-pill--${stock.key}">${escapeHtml(stock.label)}</span><small class="stock-number">${escapeHtml(String(product.stock))}</small></td>
+      <td><span class="visibility-pill ${product.hidden ? "is-hidden-product" : ""}">${product.hidden ? "Oculto" : "Visible"}</span>${product.featured ? '<span class="featured-pill">Destacado</span>' : ""}</td>
+      <td><button class="row-action product-edit-button" type="button" data-product-code="${escapeAttr(product.code)}" aria-label="Editar ${escapeAttr(product.displayName)}">•••</button></td>
+    </tr>`;
+  }).join("");
+}
+
+function renderProductPagination() {
+  const total = productsFiltered.length;
+  const maxPage = Math.max(1, Math.ceil(total / PRODUCT_PAGE_SIZE));
+  const start = total ? (productPage - 1) * PRODUCT_PAGE_SIZE + 1 : 0;
+  const end = total ? Math.min(productPage * PRODUCT_PAGE_SIZE, total) : 0;
+  productsPageInfo.textContent = total ? `${start}–${end} de ${total} productos` : "0 productos";
+  productsPrevPage.disabled = productPage <= 1;
+  productsNextPage.disabled = productPage >= maxPage || total === 0;
+}
+
+function openProductEditor(code) {
+  const product = productsCache.find((item) => item.code === code);
+  if (!product) return;
+  const view = effectiveProduct(product);
+  selectedProductCode = code;
+  productDrawerTitle.textContent = view.displayName;
+  productDrawerCode.textContent = `SKU ${code}`;
+  productDrawerImage.src = view.displayImageUrl || "";
+  productDrawerImage.alt = view.imageAlt || view.displayName;
+  productDrawerImage.classList.toggle("is-empty", !view.displayImageUrl);
+  productApiSku.textContent = product.code || "—";
+  productApiName.textContent = product.name || "—";
+  productApiPrice.textContent = money(product.price);
+  productApiStock.textContent = `${product.stock} · ${stockState(product.stock).label}`;
+  productApiCategory.textContent = product.category || "—";
+  productApiSubcategory.textContent = product.subcategory || "—";
+  productCustomName.value = view.override.customName || "";
+  productPromoPrice.value = view.override.promoPrice ?? "";
+  productCustomCategory.value = view.override.customCategory || "";
+  productCustomSubcategory.value = view.override.customSubcategory || "";
+  productCustomDescription.value = view.override.customDescription || "";
+  productImageUrl.value = view.override.imageUrl || "";
+  productImageAlt.value = view.override.imageAlt || "";
+  productVisible.checked = !view.hidden;
+  productFeatured.checked = view.featured;
+  productSaveMessage.textContent = "";
+  productDrawer.classList.remove("is-hidden");
+  productDrawer.setAttribute("aria-hidden", "false");
+  document.body.classList.add("drawer-open");
+}
+
+function closeProductEditor() {
+  selectedProductCode = null;
+  productDrawer.classList.add("is-hidden");
+  productDrawer.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("drawer-open");
+}
+
+function collectProductOverride() {
+  return {
+    customName: productCustomName.value.trim(),
+    customDescription: productCustomDescription.value.trim(),
+    customCategory: productCustomCategory.value.trim(),
+    customSubcategory: productCustomSubcategory.value.trim(),
+    promoPrice: parseOptionalMoney(productPromoPrice.value),
+    imageUrl: productImageUrl.value.trim(),
+    imageAlt: productImageAlt.value.trim(),
+    hidden: !productVisible.checked,
+    featured: productFeatured.checked
+  };
+}
+
+async function persistProductOverride(code, override) {
+  if (!db || !auth?.currentUser) throw new Error("No hay una sesión activa.");
+  const payload = {
+    ...override,
+    code,
+    updatedAt: serverTimestamp(),
+    updatedBy: auth.currentUser.email || "authenticated-user"
+  };
+  await setDoc(doc(db, PRODUCT_OVERRIDES_COLLECTION, overrideDocId(code)), payload);
+  productOverrides[code] = { ...override, code };
+}
+
+async function saveCurrentProductOverride() {
+  if (!selectedProductCode) return;
+  const code = selectedProductCode;
+  const previous = productOverrides[code] || {};
+  const next = collectProductOverride();
+  const promo = next.promoPrice;
+  const product = productsCache.find((item) => item.code === code);
+  if (promo !== null && product?.price !== null && Number(promo) >= Number(product.price)) {
+    productSaveMessage.textContent = "El precio promocional debe ser menor al precio base de la API.";
+    productSaveMessage.classList.add("error");
+    return;
+  }
+  saveProductOverrideButton.disabled = true;
+  productSaveMessage.classList.remove("error");
+  productSaveMessage.textContent = "Guardando…";
+  try {
+    await persistProductOverride(code, next);
+    const oldUrl = String(previous.imageUrl || "");
+    const newUrl = String(next.imageUrl || "");
+    if (isManagedCpanelAsset(oldUrl) && oldUrl !== newUrl) {
+      try {
+        const token = await auth.currentUser.getIdToken();
+        await requestAssetDelete(oldUrl, token);
+      } catch (error) { console.warn("Old product asset was preserved", error); }
+    }
+    rebuildProductCategoryFilter();
+    applyProductFilters();
+    openProductEditor(code);
+    productSaveMessage.textContent = "Cambios guardados en Firebase.";
+  } catch (error) {
+    console.error(error);
+    productSaveMessage.textContent = error?.message || "No fue posible guardar los overrides.";
+    productSaveMessage.classList.add("error");
+  } finally {
+    saveProductOverrideButton.disabled = false;
+  }
+}
+
+async function resetCurrentProductOverride() {
+  if (!selectedProductCode || !db || !auth?.currentUser) return;
+  const code = selectedProductCode;
+  const previous = productOverrides[code] || {};
+  if (!confirm(`¿Restablecer todos los overrides de ${code}? Los datos de inventario no se modificarán.`)) return;
+  resetProductOverrideButton.disabled = true;
+  productSaveMessage.textContent = "Restableciendo…";
+  try {
+    await deleteDoc(doc(db, PRODUCT_OVERRIDES_COLLECTION, overrideDocId(code)));
+    delete productOverrides[code];
+    if (isManagedCpanelAsset(previous.imageUrl)) {
+      try {
+        const token = await auth.currentUser.getIdToken();
+        await requestAssetDelete(previous.imageUrl, token);
+      } catch (error) { console.warn("Product asset was preserved", error); }
+    }
+    rebuildProductCategoryFilter();
+    applyProductFilters();
+    openProductEditor(code);
+    productSaveMessage.textContent = "Overrides restablecidos.";
+  } catch (error) {
+    console.error(error);
+    productSaveMessage.textContent = error?.message || "No fue posible restablecer los overrides.";
+    productSaveMessage.classList.add("error");
+  } finally {
+    resetProductOverrideButton.disabled = false;
+  }
+}
+
+async function uploadCurrentProductImage() {
+  const file = productImageFile.files?.[0];
+  const code = selectedProductCode;
+  if (!file || !code || !auth?.currentUser) return;
+  const previous = productOverrides[code] || {};
+  productUploadButton.disabled = true;
+  productSaveMessage.classList.remove("error");
+  productSaveMessage.textContent = "Comprobando storage…";
+  let uploadedUrl = "";
+  try {
+    const token = await auth.currentUser.getIdToken();
+    await checkAssetHealth(token);
+    productSaveMessage.textContent = "Subiendo imagen…";
+    const body = new FormData();
+    body.append("file", file);
+    body.append("key", `catalog-product-${code}`);
+    body.append("_firebaseToken", token);
+    const response = await fetchWithTimeout("api/upload-website-asset.php", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "X-Firebase-Token": token },
+      body
+    }, 45000);
+    const result = await safeJson(response);
+    if (!response.ok || !result?.ok || !result?.url) throw new Error(result?.error || `Upload failed (${response.status})`);
+    uploadedUrl = result.url;
+    const next = { ...previous, imageUrl: uploadedUrl };
+    delete next.id;
+    delete next.updatedAt;
+    delete next.updatedBy;
+    await persistProductOverride(code, next);
+    productImageUrl.value = uploadedUrl;
+    productDrawerImage.src = uploadedUrl;
+    productDrawerImage.alt = productImageAlt.value.trim() || effectiveProduct(productsCache.find((item) => item.code === code)).displayName;
+    applyProductFilters();
+    if (isManagedCpanelAsset(previous.imageUrl) && previous.imageUrl !== uploadedUrl) {
+      try { await requestAssetDelete(previous.imageUrl, token); } catch (error) { console.warn("Old product image preserved", error); }
+    }
+    productSaveMessage.textContent = "Imagen guardada en cPanel y Firebase.";
+  } catch (error) {
+    console.error("Product image upload failed", error);
+    productSaveMessage.textContent = error?.message || "No fue posible subir la imagen.";
+    productSaveMessage.classList.add("error");
+    if (uploadedUrl && isManagedCpanelAsset(uploadedUrl)) {
+      try {
+        const token = await auth.currentUser.getIdToken();
+        await requestAssetDelete(uploadedUrl, token);
+      } catch (cleanupError) { console.warn("Orphan product image preserved", cleanupError); }
+    }
+  } finally {
+    productImageFile.value = "";
+    productUploadButton.disabled = false;
+  }
+}
+
+refreshProductsButton?.addEventListener("click", loadProducts);
+retryProductsButton?.addEventListener("click", loadProducts);
+productSearch?.addEventListener("input", () => { productPage = 1; applyProductFilters(); });
+productCategoryFilter?.addEventListener("change", () => { productPage = 1; applyProductFilters(); });
+productStatusFilter?.addEventListener("change", () => { productPage = 1; applyProductFilters(); });
+productsPrevPage?.addEventListener("click", () => { if (productPage > 1) { productPage -= 1; renderProductsTable(); renderProductPagination(); } });
+productsNextPage?.addEventListener("click", () => { const max = Math.ceil(productsFiltered.length / PRODUCT_PAGE_SIZE); if (productPage < max) { productPage += 1; renderProductsTable(); renderProductPagination(); } });
+productsBody?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-product-code]");
+  if (button) openProductEditor(button.dataset.productCode);
+});
+productDrawerBackdrop?.addEventListener("click", closeProductEditor);
+closeProductDrawerButton?.addEventListener("click", closeProductEditor);
+saveProductOverrideButton?.addEventListener("click", saveCurrentProductOverride);
+resetProductOverrideButton?.addEventListener("click", resetCurrentProductOverride);
+productUploadButton?.addEventListener("click", () => productImageFile?.click());
+productImageFile?.addEventListener("change", uploadCurrentProductImage);
+productImageUrl?.addEventListener("input", () => {
+  const value = productImageUrl.value.trim();
+  if (value) productDrawerImage.src = value;
+  else if (selectedProductCode) {
+    const product = productsCache.find((item) => item.code === selectedProductCode);
+    productDrawerImage.src = product?.imageUrl || "";
+  }
+});
 
 function startMessagesListener() {
   stopMessagesListener();

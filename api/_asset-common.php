@@ -111,6 +111,7 @@ function sectionDirectory(string $key): string {
     $key = strtolower(trim($key));
     if ($key === 'hero' || $key === 'hero-video') return 'hero';
     if (str_starts_with($key, 'products-')) return 'products';
+    if (str_starts_with($key, 'catalog-product-')) return 'catalog-products';
     if ($key === 'about') return 'about';
     if (str_starts_with($key, 'retailer-')) return 'stores';
     if (str_starts_with($key, 'inspiration-')) return 'inspiration';
@@ -185,8 +186,38 @@ function recursiveContainsExactString(mixed $value, string $needle): bool {
     return false;
 }
 
+function firestoreCollectionContainsUrl(string $collection, string $url, string $idToken): ?bool {
+    $pageToken = '';
+    $pages = 0;
+    do {
+        $endpoint = 'https://firestore.googleapis.com/v1/projects/' . rawurlencode(FIREBASE_PROJECT_ID)
+            . '/databases/(default)/documents/' . rawurlencode($collection) . '?pageSize=300';
+        if ($pageToken !== '') $endpoint .= '&pageToken=' . rawurlencode($pageToken);
+        try {
+            $result = curlJson($endpoint, 'GET', null, ['Authorization: Bearer ' . $idToken]);
+        } catch (Throwable $e) {
+            return null;
+        }
+        if ($result['status'] === 404) return false;
+        if ($result['status'] !== 200) return null;
+        $documents = $result['data']['documents'] ?? [];
+        if (is_array($documents)) {
+            foreach ($documents as $document) {
+                if (recursiveContainsExactString($document, $url)) return true;
+            }
+        }
+        $pageToken = trim((string) ($result['data']['nextPageToken'] ?? ''));
+        $pages++;
+    } while ($pageToken !== '' && $pages < 20);
+    return false;
+}
+
 function isAssetStillReferenced(string $url, string $idToken): ?bool {
     $document = firestoreHomeDocument($idToken);
     if ($document === null) return null;
-    return recursiveContainsExactString($document, $url);
+    if (recursiveContainsExactString($document, $url)) return true;
+
+    // Product overrides also store public cPanel image URLs. Preserve an asset
+    // whenever any catalog override still points to it.
+    return firestoreCollectionContainsUrl('catalogProductOverrides', $url, $idToken);
 }

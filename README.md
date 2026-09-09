@@ -1,6 +1,6 @@
-# Nautica Panel v4 — Web Design + Mensajes + cPanel Assets
+# Nautica Panel v7 — Productos + Web Design + Mensajes + cPanel Assets
 
-Base real de esta versión: `nautica-panel-main-v3-webdesign-messages.zip`.
+Base real de esta versión: `nautica-panel-main(1).zip` (continuidad directa de v6).
 Firebase existente: `nautica-ca65d`.
 
 ## Contenido y mensajes
@@ -36,6 +36,7 @@ Estructura creada automáticamente al subir:
 - `home/inspiration/`
 - `home/newsletter/`
 - `home/contact/`
+- `home/catalog-products/`
 
 ## Flujo seguro de reemplazo
 1. El Panel obtiene un Firebase ID token del usuario autenticado.
@@ -45,7 +46,7 @@ Estructura creada automáticamente al subir:
 5. El endpoint devuelve la URL pública.
 6. El Panel actualiza únicamente ese campo en `siteContent/home`.
 7. Solo después de confirmar Firestore, solicita borrar la URL anterior.
-8. El endpoint de borrado vuelve a leer `siteContent/home` usando el token autenticado y no borra si la URL todavía está referenciada.
+8. El endpoint de borrado vuelve a revisar `siteContent/home` y `catalogProductOverrides` usando el token autenticado y no borra si la URL todavía está referenciada.
 
 Si falla la subida o Firestore, la imagen anterior se conserva.
 Las URLs antiguas/locales previas a v4 nunca se borran automáticamente porque el endpoint solo acepta URLs bajo `https://assets.nauticahome.com.mx/`.
@@ -57,7 +58,7 @@ Para borrar valida:
 - ausencia de `../`;
 - resolución física dentro de `ASSET_PHYSICAL_BASE`;
 - sesión Firebase válida;
-- ausencia de referencias activas en `siteContent/home`.
+- ausencia de referencias activas en `siteContent/home` o `catalogProductOverrides`.
 
 Formatos soportados:
 - JPG/JPEG
@@ -105,3 +106,21 @@ No existe ningún comando que borre `/public_html/assets-nautica`; el storage pe
 - Cada sección incluye Reset para volver a los fallbacks de la versión estable antes de guardar.
 - Los campos de imagen muestran el tamaño recomendado dentro del editor.
 - El uploader y la eliminación segura siguen usando `api/upload-website-asset.php` y `api/delete-website-asset.php`.
+
+## v7 — Productos · Segel ERP + Firebase overrides
+
+La pestaña **Productos** queda habilitada sobre la arquitectura existente del Panel.
+
+- Fuente de inventario: `https://segel-erp.vercel.app/api/catalogo` mediante GET directo, sin credenciales privadas en frontend.
+- Normalización centralizada: `js/inventory-api.js`.
+- SKU/código: se resuelve desde `codigo`, `code`, `sku`, `clave`, `idProducto`, `productId` o `id`, conservando el valor real en `code` y el payload original en memoria (`raw`).
+- Stock: siempre se obtiene del payload de API; el Panel no permite editarlo. UI: Disponible (>4), Poco stock (1–4), Agotado (<=0).
+- Precio base: siempre se obtiene de API. Una promoción editorial puede guardarse por separado como override.
+- Overrides Firestore: `catalogProductOverrides/{encodeURIComponent(code)}`. Cada documento conserva además `code` exacto para mantener el SKU real de punta a punta.
+- Campos override: `customName`, `customDescription`, `customCategory`, `customSubcategory`, `promoPrice`, `imageUrl`, `imageAlt`, `hidden`, `featured`.
+- Las imágenes personalizadas siguen el flujo cPanel existente y se publican bajo `https://assets.nauticahome.com.mx/home/catalog-products/`.
+- `api/delete-website-asset.php` conserva una imagen si sigue referenciada por `siteContent/home` o por algún documento de `catalogProductOverrides`.
+- La tabla usa búsqueda local, filtros, stock-priority sorting y paginación de 50 productos.
+- No se guarda una copia del catálogo API en Firestore.
+
+Para activar los overrides en producción, publicar también el bloque `catalogProductOverrides` incluido en `firestore.rules`.

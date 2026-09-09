@@ -37,7 +37,7 @@
           <button class="nav-item active" data-view="newsletter"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4z"/><path d="m4 7 8 6 8-6"/></svg><span class="nav-label">Newsletter</span></button>
           <button class="nav-item" data-view="messages"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/></svg><span class="nav-label">Mensajes</span><span id="messageBadge" class="nav-badge is-hidden">0</span></button>
           <button class="nav-item" data-view="webdesign"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg><span class="nav-label">Web Design</span></button>
-          <button class="nav-item disabled" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h12l2 5H4zM5 7v15h14V7M9 11h6"/></svg><span class="nav-label">Productos</span><span class="nav-soon">Próximamente</span></button>
+          <button class="nav-item" data-view="products"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h12l2 5H4zM5 7v15h14V7M9 11h6"/></svg><span class="nav-label">Productos</span></button>
           <button class="nav-item disabled" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18M7 16l4-5 4 3 5-7"/></svg><span class="nav-label">Ventas</span><span class="nav-soon">Próximamente</span></button>
           <button class="nav-item disabled" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="7" r="4"/><path d="M2 21v-2a6 6 0 0 1 6-6h2a6 6 0 0 1 6 6v2M19 8v6M16 11h6"/></svg><span class="nav-label">Leads</span><span class="nav-soon">Próximamente</span></button>
         </nav>
@@ -94,6 +94,46 @@
           </section>
         </section>
 
+        <section class="panel-view-content is-hidden" data-panel-view="products">
+          <section class="product-summary-grid">
+            <article class="stat-card"><span class="stat-label">Productos API</span><strong id="productTotalCount">0</strong></article>
+            <article class="stat-card"><span class="stat-label">Disponibles</span><strong id="productAvailableCount">0</strong></article>
+            <article class="stat-card"><span class="stat-label">Poco stock</span><strong id="productLowStockCount">0</strong></article>
+            <article class="stat-card"><span class="stat-label">Agotados</span><strong id="productOutCount">0</strong></article>
+          </section>
+
+          <section class="table-card products-card">
+            <div class="table-toolbar products-toolbar">
+              <div><h2>Catálogo de productos</h2><p>Inventario en tiempo real desde Segel ERP. Los overrides se guardan por separado en Firebase.</p></div>
+              <button id="refreshProductsButton" class="secondary-button" type="button">Actualizar inventario</button>
+            </div>
+            <div class="products-filters">
+              <label class="product-search-field"><span>Buscar</span><input id="productSearch" type="search" placeholder="Nombre, SKU, categoría…" autocomplete="off"></label>
+              <label><span>Categoría</span><select id="productCategoryFilter"><option value="all">Todas</option></select></label>
+              <label><span>Estado</span><select id="productStatusFilter">
+                <option value="all">Todos</option>
+                <option value="available">Disponibles</option>
+                <option value="low">Poco stock</option>
+                <option value="out">Agotados</option>
+                <option value="promo">Con promoción</option>
+                <option value="hidden">Ocultos</option>
+              </select></label>
+            </div>
+            <div id="productsLoading" class="products-state">Cargando productos…</div>
+            <div id="productsError" class="products-state products-state--error is-hidden"><strong>No se pudieron cargar los productos.</strong><span id="productsErrorText"></span><button id="retryProductsButton" class="secondary-button compact" type="button">Reintentar</button></div>
+            <div class="table-wrap" id="productsTableWrap">
+              <table class="products-table">
+                <thead><tr><th>Imagen</th><th>SKU</th><th>Producto</th><th>Categoría</th><th>Precio</th><th>Stock</th><th>Estado</th><th>Acciones</th></tr></thead>
+                <tbody id="productsBody"></tbody>
+              </table>
+            </div>
+            <div class="products-pagination">
+              <span id="productsPageInfo">0 productos</span>
+              <div><button id="productsPrevPage" class="secondary-button compact" type="button">Anterior</button><button id="productsNextPage" class="secondary-button compact" type="button">Siguiente</button></div>
+            </div>
+          </section>
+        </section>
+
         <section class="panel-view-content is-hidden" data-panel-view="webdesign">
           <section class="editor-header-card">
             <div>
@@ -129,6 +169,49 @@
       <div class="drawer-actions">
         <button id="archiveMessageButton" class="secondary-button" type="button">Archivar</button>
       </div>
+    </aside>
+  </div>
+
+  <div id="productDrawer" class="message-drawer product-drawer is-hidden" aria-hidden="true">
+    <button id="productDrawerBackdrop" class="message-drawer-backdrop" type="button" aria-label="Cerrar producto"></button>
+    <aside class="message-drawer-panel product-drawer-panel" aria-label="Editor de producto">
+      <div class="drawer-header">
+        <div><p class="eyebrow">Producto</p><h2 id="productDrawerTitle">—</h2><p id="productDrawerCode" class="product-drawer-code">—</p></div>
+        <button id="closeProductDrawer" class="icon-button" type="button" aria-label="Cerrar">×</button>
+      </div>
+
+      <section class="product-api-card">
+        <div class="product-editor-image"><img id="productDrawerImage" src="" alt=""><span>Vista actual</span></div>
+        <div><p class="product-editor-section-label">Datos del sistema de inventarios · solo lectura</p><dl class="message-meta product-api-meta">
+          <div><dt>SKU</dt><dd id="productApiSku">—</dd></div>
+          <div><dt>Nombre original</dt><dd id="productApiName">—</dd></div>
+          <div><dt>Precio base</dt><dd id="productApiPrice">—</dd></div>
+          <div><dt>Stock</dt><dd id="productApiStock">—</dd></div>
+          <div><dt>Categoría original</dt><dd id="productApiCategory">—</dd></div>
+          <div><dt>Subcategoría original</dt><dd id="productApiSubcategory">—</dd></div>
+        </dl></div>
+      </section>
+
+      <section class="product-overrides-card">
+        <p class="product-editor-section-label">Overrides del Panel · Firebase</p>
+        <div class="product-editor-grid">
+          <label class="editor-field"><span>Nombre personalizado</span><input id="productCustomName" type="text" placeholder="Usar nombre de API"></label>
+          <label class="editor-field"><span>Precio promocional</span><input id="productPromoPrice" type="number" min="0" step="0.01" placeholder="Sin promoción"></label>
+          <label class="editor-field"><span>Categoría personalizada</span><input id="productCustomCategory" type="text" placeholder="Usar categoría de API"></label>
+          <label class="editor-field"><span>Subcategoría personalizada</span><input id="productCustomSubcategory" type="text" placeholder="Usar subcategoría de API"></label>
+          <label class="editor-field editor-field-wide"><span>Descripción personalizada</span><textarea id="productCustomDescription" placeholder="Usar descripción de API"></textarea></label>
+          <div class="editor-field editor-field-wide product-image-override">
+            <span>Imagen personalizada</span>
+            <div class="product-image-row"><input id="productImageUrl" type="url" placeholder="https://assets.nauticahome.com.mx/…"><button id="productUploadButton" class="secondary-button compact" type="button">Subir / reemplazar</button><input id="productImageFile" class="file-input" type="file" accept="image/*"></div>
+            <small>La imagen se guarda en cPanel y la URL pública en Firebase. La imagen original de API permanece intacta.</small>
+          </div>
+          <label class="editor-field editor-field-wide"><span>Alt text</span><input id="productImageAlt" type="text" placeholder="Descripción accesible de la imagen"></label>
+          <label class="product-toggle-row"><span><strong>Visible</strong><small>Ocultar solo afecta la presentación administrada por el Panel; no modifica inventario.</small></span><span class="toggle-control"><input id="productVisible" type="checkbox" checked><span class="toggle-track"></span></span></label>
+          <label class="product-toggle-row"><span><strong>Destacado</strong><small>Marca editorial para futuras superficies de catálogo.</small></span><span class="toggle-control"><input id="productFeatured" type="checkbox"><span class="toggle-track"></span></span></label>
+        </div>
+      </section>
+      <p id="productSaveMessage" class="form-message" aria-live="polite"></p>
+      <div class="drawer-actions product-drawer-actions"><button id="resetProductOverride" class="secondary-button" type="button">Restablecer overrides</button><button id="saveProductOverride" class="primary-button" type="button">Guardar cambios</button></div>
     </aside>
   </div>
 
