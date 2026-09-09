@@ -1,4 +1,4 @@
-# Nautica Panel v7 — Productos + Web Design + Mensajes + cPanel Assets
+# Nautica Panel v8 v7 — Productos + Web Design + Mensajes + cPanel Assets
 
 Base real de esta versión: `nautica-panel-main(1).zip` (continuidad directa de v6).
 Firebase existente: `nautica-ca65d`.
@@ -124,3 +124,12 @@ La pestaña **Productos** queda habilitada sobre la arquitectura existente del P
 - No se guarda una copia del catálogo API en Firestore.
 
 Para activar los overrides en producción, publicar también el bloque `catalogProductOverrides` incluido en `firestore.rules`.
+
+## v8 · Productos / configuración de API
+
+- La URL del catálogo ahora se puede editar desde **Configuración**, igual que en la referencia funcional de Casa Glick Panel, pero usando el endpoint de Nautica/Segel ERP.
+- La configuración se guarda en `catalogSettings/admin` y requiere reglas autenticadas.
+- El endpoint predeterminado es `https://segel-erp.vercel.app/api/catalogo`.
+- Productos carga primero la API y después los overrides. Si Firestore no permite leer `catalogProductOverrides`, el inventario sigue visible y se muestra una advertencia en lugar de bloquear toda la pestaña.
+- `firestore.rules` incluye permisos autenticados para `catalogProductOverrides` y `catalogSettings`.
+- El contador textual de Newsletter quedó centrado y con mayor padding vertical.

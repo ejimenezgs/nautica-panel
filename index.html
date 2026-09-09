@@ -38,6 +38,7 @@
           <button class="nav-item" data-view="messages"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/></svg><span class="nav-label">Mensajes</span><span id="messageBadge" class="nav-badge is-hidden">0</span></button>
           <button class="nav-item" data-view="webdesign"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg><span class="nav-label">Web Design</span></button>
           <button class="nav-item" data-view="products"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h12l2 5H4zM5 7v15h14V7M9 11h6"/></svg><span class="nav-label">Productos</span></button>
+          <button class="nav-item" data-view="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21h-4v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H3v-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3V3h4v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1H21v4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span class="nav-label">Configuración</span></button>
           <button class="nav-item disabled" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18M7 16l4-5 4 3 5-7"/></svg><span class="nav-label">Ventas</span><span class="nav-soon">Próximamente</span></button>
           <button class="nav-item disabled" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="7" r="4"/><path d="M2 21v-2a6 6 0 0 1 6-6h2a6 6 0 0 1 6 6v2M19 8v6M16 11h6"/></svg><span class="nav-label">Leads</span><span class="nav-soon">Próximamente</span></button>
         </nav>
@@ -120,6 +121,7 @@
               </select></label>
             </div>
             <div id="productsLoading" class="products-state">Cargando productos…</div>
+            <div id="productsWarning" class="products-warning is-hidden" aria-live="polite"></div>
             <div id="productsError" class="products-state products-state--error is-hidden"><strong>No se pudieron cargar los productos.</strong><span id="productsErrorText"></span><button id="retryProductsButton" class="secondary-button compact" type="button">Reintentar</button></div>
             <div class="table-wrap" id="productsTableWrap">
               <table class="products-table">
@@ -130,6 +132,20 @@
             <div class="products-pagination">
               <span id="productsPageInfo">0 productos</span>
               <div><button id="productsPrevPage" class="secondary-button compact" type="button">Anterior</button><button id="productsNextPage" class="secondary-button compact" type="button">Siguiente</button></div>
+            </div>
+          </section>
+        </section>
+
+        <section class="panel-view-content is-hidden" data-panel-view="settings">
+          <section class="table-card settings-card">
+            <div class="table-toolbar">
+              <div><h2>Configuración</h2><p>Conexión del catálogo externo utilizado por la pestaña Productos.</p></div>
+            </div>
+            <div class="settings-form">
+              <label class="settings-field" for="catalogApiUrl"><span>Endpoint del catálogo</span><input id="catalogApiUrl" type="url" value="https://segel-erp.vercel.app/api/catalogo" autocomplete="off" spellcheck="false" /></label>
+              <div class="settings-note"><strong>Fuente de inventario</strong><p>SKU, precio y stock se consultan directamente desde este endpoint. Los overrides editoriales permanecen en Firebase y no sustituyen el inventario.</p></div>
+              <div class="settings-actions"><button id="saveCatalogSettings" class="primary-button" type="button">Guardar configuración</button><button id="resetCatalogApiUrl" class="secondary-button" type="button">Usar endpoint predeterminado</button></div>
+              <p id="catalogSettingsMessage" class="form-message settings-message" aria-live="polite"></p>
             </div>
           </section>
         </section>

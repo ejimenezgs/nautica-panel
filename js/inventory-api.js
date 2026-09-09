@@ -234,12 +234,12 @@ export function unwrapPayload(payload) {
   return [];
 }
 
-export async function fetchInventoryProducts({ signal, timeoutMs = 20000 } = {}) {
+export async function fetchInventoryProducts({ url = INVENTORY_API_URL, signal, timeoutMs = 20000 } = {}) {
   const controller = signal ? null : new AbortController();
   const activeSignal = signal || controller.signal;
   const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
   try {
-    const response = await fetch(INVENTORY_API_URL, {
+    const response = await fetch(url, {
       method: "GET",
       headers: { Accept: "application/json" },
       cache: "no-store",

@@ -25,7 +25,9 @@ import {
   CONTACT_COLLECTION,
   SITE_CONTENT_COLLECTION,
   SITE_CONTENT_HOME_DOC,
-  PRODUCT_OVERRIDES_COLLECTION
+  PRODUCT_OVERRIDES_COLLECTION,
+  CATALOG_SETTINGS_COLLECTION,
+  CATALOG_SETTINGS_DOC
 } from "./firebase-config.js";
 import {
   INVENTORY_API_URL,
@@ -159,6 +161,11 @@ const productTotalCount = document.querySelector("#productTotalCount");
 const productAvailableCount = document.querySelector("#productAvailableCount");
 const productLowStockCount = document.querySelector("#productLowStockCount");
 const productOutCount = document.querySelector("#productOutCount");
+const productsWarning = document.querySelector("#productsWarning");
+const catalogApiUrlInput = document.querySelector("#catalogApiUrl");
+const saveCatalogSettingsButton = document.querySelector("#saveCatalogSettings");
+const resetCatalogApiUrlButton = document.querySelector("#resetCatalogApiUrl");
+const catalogSettingsMessage = document.querySelector("#catalogSettingsMessage");
 
 const productDrawer = document.querySelector("#productDrawer");
 const productDrawerBackdrop = document.querySelector("#productDrawerBackdrop");
@@ -225,6 +232,7 @@ let productPage = 1;
 let productsLoaded = false;
 let productsLoadingNow = false;
 let selectedProductCode = null;
+let catalogApiUrl = INVENTORY_API_URL;
 
 if (isConfigured) {
   const app = initializeApp(firebaseConfig);
@@ -237,7 +245,7 @@ if (isConfigured) {
       panelView.classList.remove("is-hidden");
       userEmail.textContent = user.email || "Usuario";
       if (sidebarUserEmail) sidebarUserEmail.textContent = user.email || "Usuario";
-      await Promise.all([loadNewsletter(), loadContent()]);
+      await Promise.all([loadNewsletter(), loadContent(), loadCatalogSettings()]);
       startMessagesListener();
     } else {
       stopMessagesListener();
@@ -291,10 +299,62 @@ window.addEventListener("resize", () => { if (window.innerWidth > 860) closeSide
 function setView(view) {
   navButtons.forEach((button) => button.classList.toggle("active", button.dataset.view === view));
   viewSections.forEach((section) => section.classList.toggle("is-hidden", section.dataset.panelView !== view));
-  const titles = { newsletter: "Newsletter", messages: "Mensajes", webdesign: "Web Design", products: "Productos" };
+  const titles = { newsletter: "Newsletter", messages: "Mensajes", webdesign: "Web Design", products: "Productos", settings: "Configuración" };
   viewTitle.textContent = titles[view] || "Nautica Panel";
   if (view === "products" && !productsLoaded && !productsLoadingNow) loadProducts();
   if (window.innerWidth <= 860) closeSidebar();
+}
+
+async function loadCatalogSettings() {
+  catalogApiUrl = INVENTORY_API_URL;
+  if (catalogApiUrlInput) catalogApiUrlInput.value = catalogApiUrl;
+  if (!db || !auth?.currentUser) return;
+  try {
+    const snapshot = await getDoc(doc(db, CATALOG_SETTINGS_COLLECTION, CATALOG_SETTINGS_DOC));
+    const savedUrl = String(snapshot.data()?.apiUrl || "").trim();
+    if (savedUrl) catalogApiUrl = savedUrl;
+    if (catalogApiUrlInput) catalogApiUrlInput.value = catalogApiUrl;
+  } catch (error) {
+    console.warn("Could not load catalog settings; using default endpoint", error);
+    if (catalogSettingsMessage) {
+      catalogSettingsMessage.textContent = "No se pudo leer la configuración guardada. Se usará el endpoint predeterminado.";
+      catalogSettingsMessage.classList.add("error");
+    }
+  }
+}
+
+async function saveCatalogSettings() {
+  if (!db || !auth?.currentUser || !catalogApiUrlInput) return;
+  const value = catalogApiUrlInput.value.trim() || INVENTORY_API_URL;
+  let parsed;
+  try {
+    parsed = new URL(value);
+    if (!/^https?:$/.test(parsed.protocol)) throw new Error();
+  } catch {
+    catalogSettingsMessage.textContent = "Ingresa una URL http/https válida.";
+    catalogSettingsMessage.classList.add("error");
+    return;
+  }
+  saveCatalogSettingsButton.disabled = true;
+  catalogSettingsMessage.classList.remove("error");
+  catalogSettingsMessage.textContent = "Guardando…";
+  try {
+    await setDoc(doc(db, CATALOG_SETTINGS_COLLECTION, CATALOG_SETTINGS_DOC), {
+      apiUrl: parsed.href,
+      updatedAt: serverTimestamp(),
+      updatedBy: auth.currentUser.email || auth.currentUser.uid
+    }, { merge: true });
+    catalogApiUrl = parsed.href;
+    catalogApiUrlInput.value = catalogApiUrl;
+    productsLoaded = false;
+    catalogSettingsMessage.textContent = "Endpoint guardado. La próxima actualización usará esta URL.";
+  } catch (error) {
+    console.error(error);
+    catalogSettingsMessage.textContent = error?.message || "No fue posible guardar la configuración.";
+    catalogSettingsMessage.classList.add("error");
+  } finally {
+    saveCatalogSettingsButton.disabled = false;
+  }
 }
 
 refreshButton.addEventListener("click", loadNewsletter);
@@ -405,12 +465,23 @@ async function loadProducts() {
   refreshProductsButton.disabled = true;
   retryProductsButton.disabled = true;
   try {
-    const [apiProducts, overrides] = await Promise.all([
-      fetchInventoryProducts(),
-      loadProductOverrides()
-    ]);
+    productsWarning?.classList.add("is-hidden");
+    if (productsWarning) productsWarning.textContent = "";
+
+    const apiProducts = await fetchInventoryProducts({ url: catalogApiUrl });
     productsCache = apiProducts;
-    productOverrides = overrides;
+
+    try {
+      productOverrides = await loadProductOverrides();
+    } catch (overrideError) {
+      console.warn("Inventory loaded but product overrides could not be read", overrideError);
+      productOverrides = {};
+      if (productsWarning) {
+        productsWarning.textContent = "El inventario se cargó correctamente, pero Firebase no permitió leer los overrides. Publica las reglas incluidas en esta versión para habilitar edición y promociones.";
+        productsWarning.classList.remove("is-hidden");
+      }
+    }
+
     productsLoaded = true;
     productPage = 1;
     rebuildProductCategoryFilter();
@@ -420,7 +491,7 @@ async function loadProducts() {
     productsLoaded = false;
     productsCache = [];
     productsFiltered = [];
-    productsErrorText.textContent = `${error?.message || "Error desconocido"} Endpoint: ${INVENTORY_API_URL}`;
+    productsErrorText.textContent = `${error?.message || "Error desconocido"} Endpoint: ${catalogApiUrl}`;
     productsError?.classList.remove("is-hidden");
     productsBody.innerHTML = "";
     renderProductStats();
@@ -709,6 +780,14 @@ async function uploadCurrentProductImage() {
     productUploadButton.disabled = false;
   }
 }
+
+saveCatalogSettingsButton?.addEventListener("click", saveCatalogSettings);
+resetCatalogApiUrlButton?.addEventListener("click", () => {
+  if (!catalogApiUrlInput) return;
+  catalogApiUrlInput.value = INVENTORY_API_URL;
+  catalogSettingsMessage?.classList.remove("error");
+  if (catalogSettingsMessage) catalogSettingsMessage.textContent = "Endpoint predeterminado preparado. Pulsa Guardar configuración para aplicarlo.";
+});
 
 refreshProductsButton?.addEventListener("click", loadProducts);
 retryProductsButton?.addEventListener("click", loadProducts);
