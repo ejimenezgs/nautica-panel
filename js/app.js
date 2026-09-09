@@ -34,6 +34,11 @@ import {
   INVENTORY_API_URL,
   fetchInventoryProducts
 } from "./inventory-api.js";
+import {
+  PRODUCT_TAXONOMY,
+  classifyProduct,
+  taxonomySubcategories
+} from "./product-classification.js";
 
 const DEFAULT_HOME_CONTENT = {
   globalSettings: {
@@ -148,7 +153,7 @@ const todayCount = document.querySelector("#todayCount");
 const refreshProductsButton = document.querySelector("#refreshProductsButton");
 const retryProductsButton = document.querySelector("#retryProductsButton");
 const productSearch = document.querySelector("#productSearch");
-const productCategoryFilter = document.querySelector("#productCategoryFilter");
+const productClassificationTree = document.querySelector("#productClassificationTree");
 const productStatusFilter = document.querySelector("#productStatusFilter");
 const toggleAllProducts = document.querySelector("#toggleAllProducts");
 const productsLoading = document.querySelector("#productsLoading");
@@ -181,6 +186,9 @@ const productApiPrice = document.querySelector("#productApiPrice");
 const productApiStock = document.querySelector("#productApiStock");
 const productApiCategory = document.querySelector("#productApiCategory");
 const productApiSubcategory = document.querySelector("#productApiSubcategory");
+const productApiClassification = document.querySelector("#productApiClassification");
+const productFinalCategory = document.querySelector("#productFinalCategory");
+const productFinalSubcategory = document.querySelector("#productFinalSubcategory");
 const productCustomName = document.querySelector("#productCustomName");
 const productPromoPrice = document.querySelector("#productPromoPrice");
 const productCustomCategory = document.querySelector("#productCustomCategory");
@@ -235,6 +243,7 @@ let productsLoaded = false;
 let productsLoadingNow = false;
 let selectedProductCode = null;
 let catalogApiUrl = INVENTORY_API_URL;
+let productClassificationFilter = { category: "all", subcategory: "all" };
 
 if (isConfigured) {
   const app = initializeApp(firebaseConfig);
@@ -427,12 +436,14 @@ function effectiveProduct(product) {
   const overridePromo = parseOptionalMoney(override.promoPrice);
   const apiPromo = parseOptionalMoney(product.promoPrice);
   const promoPrice = overridePromo ?? apiPromo;
+  const classification = classifyProduct(product, override);
   return {
     ...product,
     displayName: String(override.customName || product.name || product.code),
     displayDescription: String(override.customDescription || product.description || ""),
-    displayCategory: String(override.customCategory || product.category || ""),
-    displaySubcategory: String(override.customSubcategory || product.subcategory || ""),
+    displayCategory: classification.category,
+    displaySubcategory: classification.subcategory,
+    classification,
     displayImageUrl: String(override.imageUrl || product.imageUrl || ""),
     imageAlt: String(override.imageAlt || ""),
     featured: Boolean(override.featured),
@@ -486,7 +497,7 @@ async function loadProducts() {
 
     productsLoaded = true;
     productPage = 1;
-    rebuildProductCategoryFilter();
+    rebuildProductClassificationTree();
     applyProductFilters();
   } catch (error) {
     console.error("Could not load inventory", error);
@@ -506,18 +517,40 @@ async function loadProducts() {
   }
 }
 
-function rebuildProductCategoryFilter() {
-  if (!productCategoryFilter) return;
-  const current = productCategoryFilter.value || "all";
-  const categories = [...new Set(productsCache.map((product) => effectiveProduct(product).displayCategory).filter(Boolean))]
-    .sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
-  productCategoryFilter.innerHTML = `<option value="all">Todas</option>${categories.map((category) => `<option value="${escapeAttr(category)}">${escapeHtml(category)}</option>`).join("")}`;
-  productCategoryFilter.value = categories.includes(current) ? current : "all";
+function rebuildProductClassificationTree() {
+  if (!productClassificationTree) return;
+  const views = productsCache.map(effectiveProduct);
+  const counts = new Map();
+  views.forEach((product) => {
+    const category = product.displayCategory || "Sin clasificar";
+    const subcategory = product.displaySubcategory || (category === "Sin clasificar" ? "Sin clasificar" : "Otros");
+    if (!counts.has(category)) counts.set(category, { total: 0, subcategories: new Map() });
+    const entry = counts.get(category);
+    entry.total += 1;
+    entry.subcategories.set(subcategory, (entry.subcategories.get(subcategory) || 0) + 1);
+  });
+
+  const orderedCategories = [...Object.keys(PRODUCT_TAXONOMY)].filter((category) => counts.has(category));
+  const allActive = productClassificationFilter.category === "all";
+  const chunks = [`<button class="classification-filter classification-filter--all ${allActive ? "active" : ""}" type="button" data-category-filter="all"><span>Todos</span><strong>${views.length}</strong></button>`];
+  orderedCategories.forEach((category) => {
+    const entry = counts.get(category);
+    const categoryActive = productClassificationFilter.category === category && productClassificationFilter.subcategory === "all";
+    const subRows = taxonomySubcategories(category)
+      .filter((subcategory) => entry.subcategories.has(subcategory))
+      .map((subcategory) => {
+        const active = productClassificationFilter.category === category && productClassificationFilter.subcategory === subcategory;
+        return `<button class="classification-subfilter ${active ? "active" : ""}" type="button" data-category-filter="${escapeAttr(category)}" data-subcategory-filter="${escapeAttr(subcategory)}"><span>${escapeHtml(subcategory)}</span><strong>${entry.subcategories.get(subcategory)}</strong></button>`;
+      }).join("");
+    chunks.push(`<div class="classification-group"><button class="classification-filter ${categoryActive ? "active" : ""}" type="button" data-category-filter="${escapeAttr(category)}"><span>${escapeHtml(category)}</span><strong>${entry.total}</strong></button><div class="classification-subfilters">${subRows}</div></div>`);
+  });
+  productClassificationTree.innerHTML = chunks.join("");
 }
 
 function applyProductFilters() {
   const queryText = String(productSearch?.value || "").trim().toLocaleLowerCase("es");
-  const category = productCategoryFilter?.value || "all";
+  const category = productClassificationFilter.category;
+  const subcategory = productClassificationFilter.subcategory;
   const status = productStatusFilter?.value || "all";
 
   productsFiltered = productsCache.map(effectiveProduct).filter((product) => {
@@ -525,6 +558,7 @@ function applyProductFilters() {
       .filter(Boolean).join(" ").toLocaleLowerCase("es");
     if (queryText && !haystack.includes(queryText)) return false;
     if (category !== "all" && product.displayCategory !== category) return false;
+    if (subcategory !== "all" && product.displaySubcategory !== subcategory) return false;
     const stock = stockState(product.stock);
     if (status === "available" && stock.key !== "available") return false;
     if (status === "low" && stock.key !== "low") return false;
@@ -533,6 +567,12 @@ function applyProductFilters() {
     if (status === "hidden" && !product.hidden) return false;
     return true;
   }).sort((a, b) => {
+    const categoryOrder = Object.keys(PRODUCT_TAXONOMY);
+    const categoryDiff = categoryOrder.indexOf(a.displayCategory) - categoryOrder.indexOf(b.displayCategory);
+    if (categoryDiff) return categoryDiff;
+    const subcategoryOrder = taxonomySubcategories(a.displayCategory);
+    const subcategoryDiff = subcategoryOrder.indexOf(a.displaySubcategory) - subcategoryOrder.indexOf(b.displaySubcategory);
+    if (subcategoryDiff) return subcategoryDiff;
     const rankDiff = stockState(a.stock).rank - stockState(b.stock).rank;
     if (rankDiff) return rankDiff;
     return a.displayName.localeCompare(b.displayName, "es", { sensitivity: "base", numeric: true });
@@ -572,21 +612,29 @@ function renderProductsTable() {
   }
   const start = (productPage - 1) * PRODUCT_PAGE_SIZE;
   const pageRows = productsFiltered.slice(start, start + PRODUCT_PAGE_SIZE);
-  productsBody.innerHTML = pageRows.map((product) => {
+  let lastGroup = "";
+  const html = [];
+  pageRows.forEach((product) => {
+    const groupKey = `${product.displayCategory}::${product.displaySubcategory}`;
+    if (groupKey !== lastGroup) {
+      html.push(`<tr class="product-group-row"><td colspan="8"><strong>${escapeHtml(product.displayCategory)}</strong><span>${escapeHtml(product.displaySubcategory)}</span></td></tr>`);
+      lastGroup = groupKey;
+    }
     const stock = stockState(product.stock);
     const category = [product.displayCategory, product.displaySubcategory].filter(Boolean).join(" / ") || "—";
     const image = product.displayImageUrl;
-    return `<tr>
+    html.push(`<tr>
       <td>${image ? `<img class="product-thumb" src="${escapeAttr(image)}" alt="${escapeAttr(product.imageAlt || product.displayName)}" loading="lazy">` : `<div class="product-thumb product-thumb--empty">—</div>`}</td>
       <td><strong class="product-sku">${escapeHtml(product.code)}</strong></td>
-      <td><div class="product-name-cell"><strong>${escapeHtml(product.displayName)}</strong>${product.customName ? "" : ""}<small>${escapeHtml(product.displayDescription || product.name || "")}</small></div></td>
+      <td><div class="product-name-cell"><strong>${escapeHtml(product.displayName)}</strong><small>${escapeHtml(product.displayDescription || product.name || "")}</small></div></td>
       <td>${escapeHtml(category)}</td>
       <td><div class="product-price-cell">${productPriceMarkup(product)}</div></td>
       <td><span class="stock-pill stock-pill--${stock.key}">${escapeHtml(stock.label)}</span><small class="stock-number">${escapeHtml(String(product.stock))}</small></td>
       <td><div class="product-visibility-cell"><label class="visibility-toggle" title="${product.hidden ? "Mostrar producto en la web" : "Ocultar producto de la web"}"><input type="checkbox" data-product-visibility="${escapeAttr(product.code)}" ${product.hidden ? "" : "checked"} aria-label="Visibilidad de ${escapeAttr(product.displayName)}"><span class="visibility-toggle__track"></span></label>${product.featured ? '<span class="featured-pill">Destacado</span>' : ""}</div></td>
       <td><button class="row-action product-edit-button" type="button" data-product-code="${escapeAttr(product.code)}" aria-label="Editar ${escapeAttr(product.displayName)}">•••</button></td>
-    </tr>`;
-  }).join("");
+    </tr>`);
+  });
+  productsBody.innerHTML = html.join("");
 }
 
 function updateProductVisibilityMaster() {
@@ -683,10 +731,14 @@ function openProductEditor(code) {
   productApiStock.textContent = `${product.stock} · ${stockState(product.stock).label}`;
   productApiCategory.textContent = product.category || "—";
   productApiSubcategory.textContent = product.subcategory || "—";
+  const automatic = classifyProduct(product, {});
+  productApiClassification.textContent = `${automatic.category} / ${automatic.subcategory}`;
+  productFinalCategory.textContent = view.displayCategory || "Sin clasificar";
+  productFinalSubcategory.textContent = view.displaySubcategory || "Sin clasificar";
   productCustomName.value = view.override.customName || "";
   productPromoPrice.value = view.override.promoPrice ?? "";
-  productCustomCategory.value = view.override.customCategory || "";
-  productCustomSubcategory.value = view.override.customSubcategory || "";
+  populateProductCategorySelect(view.override.categoryOverride || view.override.customCategory || "");
+  populateProductSubcategorySelect(productCustomCategory.value || view.displayCategory, view.override.subcategoryOverride || view.override.customSubcategory || "");
   productCustomDescription.value = view.override.customDescription || "";
   productImageUrl.value = view.override.imageUrl || "";
   productImageAlt.value = view.override.imageAlt || "";
@@ -696,6 +748,21 @@ function openProductEditor(code) {
   productDrawer.classList.remove("is-hidden");
   productDrawer.setAttribute("aria-hidden", "false");
   document.body.classList.add("drawer-open");
+}
+
+
+function populateProductCategorySelect(selected = "") {
+  if (!productCustomCategory) return;
+  const options = Object.keys(PRODUCT_TAXONOMY).filter((category) => category !== "Sin clasificar");
+  productCustomCategory.innerHTML = `<option value="">Automática</option>${options.map((category) => `<option value="${escapeAttr(category)}">${escapeHtml(category)}</option>`).join("")}`;
+  productCustomCategory.value = options.includes(selected) ? selected : "";
+}
+
+function populateProductSubcategorySelect(category, selected = "") {
+  if (!productCustomSubcategory) return;
+  const options = taxonomySubcategories(category).filter((subcategory) => subcategory !== "Sin clasificar");
+  productCustomSubcategory.innerHTML = `<option value="">Automática</option>${options.map((subcategory) => `<option value="${escapeAttr(subcategory)}">${escapeHtml(subcategory)}</option>`).join("")}`;
+  productCustomSubcategory.value = options.includes(selected) ? selected : "";
 }
 
 function closeProductEditor() {
@@ -709,6 +776,8 @@ function collectProductOverride() {
   return {
     customName: productCustomName.value.trim(),
     customDescription: productCustomDescription.value.trim(),
+    categoryOverride: productCustomCategory.value.trim(),
+    subcategoryOverride: productCustomSubcategory.value.trim(),
     customCategory: productCustomCategory.value.trim(),
     customSubcategory: productCustomSubcategory.value.trim(),
     promoPrice: parseOptionalMoney(productPromoPrice.value),
@@ -756,7 +825,7 @@ async function saveCurrentProductOverride() {
         await requestAssetDelete(oldUrl, token);
       } catch (error) { console.warn("Old product asset was preserved", error); }
     }
-    rebuildProductCategoryFilter();
+    rebuildProductClassificationTree();
     applyProductFilters();
     openProductEditor(code);
     productSaveMessage.textContent = "Cambios guardados en Firebase.";
@@ -785,7 +854,7 @@ async function resetCurrentProductOverride() {
         await requestAssetDelete(previous.imageUrl, token);
       } catch (error) { console.warn("Product asset was preserved", error); }
     }
-    rebuildProductCategoryFilter();
+    rebuildProductClassificationTree();
     applyProductFilters();
     openProductEditor(code);
     productSaveMessage.textContent = "Overrides restablecidos.";
@@ -863,7 +932,17 @@ resetCatalogApiUrlButton?.addEventListener("click", () => {
 refreshProductsButton?.addEventListener("click", loadProducts);
 retryProductsButton?.addEventListener("click", loadProducts);
 productSearch?.addEventListener("input", () => { productPage = 1; applyProductFilters(); });
-productCategoryFilter?.addEventListener("change", () => { productPage = 1; applyProductFilters(); });
+productClassificationTree?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-category-filter]");
+  if (!button) return;
+  productClassificationFilter = {
+    category: button.dataset.categoryFilter || "all",
+    subcategory: button.dataset.subcategoryFilter || "all"
+  };
+  productPage = 1;
+  rebuildProductClassificationTree();
+  applyProductFilters();
+});
 productStatusFilter?.addEventListener("change", () => { productPage = 1; applyProductFilters(); });
 productsPrevPage?.addEventListener("click", () => { if (productPage > 1) { productPage -= 1; renderProductsTable(); renderProductPagination(); } });
 productsNextPage?.addEventListener("click", () => { const max = Math.ceil(productsFiltered.length / PRODUCT_PAGE_SIZE); if (productPage < max) { productPage += 1; renderProductsTable(); renderProductPagination(); } });
@@ -887,6 +966,12 @@ saveProductOverrideButton?.addEventListener("click", saveCurrentProductOverride)
 resetProductOverrideButton?.addEventListener("click", resetCurrentProductOverride);
 productUploadButton?.addEventListener("click", () => productImageFile?.click());
 productImageFile?.addEventListener("change", uploadCurrentProductImage);
+productCustomCategory?.addEventListener("change", () => {
+  const product = productsCache.find((item) => item.code === selectedProductCode);
+  const fallbackCategory = product ? classifyProduct(product, {}).category : "";
+  populateProductSubcategorySelect(productCustomCategory.value || fallbackCategory, "");
+});
+
 productImageUrl?.addEventListener("input", () => {
   const value = productImageUrl.value.trim();
   if (value) productDrawerImage.src = value;

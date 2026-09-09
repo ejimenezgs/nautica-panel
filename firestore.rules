@@ -1,18 +1,25 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
+
     function isSignedIn() {
       return request.auth != null;
     }
 
+    function isValidEmail(email) {
+      return email is string
+        && email.size() >= 3
+        && email.size() <= 254
+        && email.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$');
+    }
+
     match /newsletterSubscribers/{subscriberId} {
-      function isValidPublicSubscription() {
-        return request.resource.data.keys().hasOnly(['email', 'createdAt', 'source', 'status'])
-          && request.resource.data.keys().hasAll(['email', 'createdAt', 'source', 'status'])
-          && request.resource.data.email is string
-          && request.resource.data.email.size() >= 3
-          && request.resource.data.email.size() <= 254
-          && request.resource.data.email.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')
+      function isValidPublicCreate() {
+        return
+          request.resource.data.keys().hasOnly(['email','createdAt','source','status'])
+          && request.resource.data.keys().hasAll(['email','createdAt','source','status'])
+          && isValidEmail(request.resource.data.email)
           && subscriberId == request.resource.data.email
           && request.resource.data.createdAt == request.time
           && request.resource.data.source == 'Landing'
@@ -20,56 +27,60 @@ service cloud.firestore {
       }
 
       function isPublicReactivationOnly() {
-        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+        return
+          resource.data.keys().hasAll(['email','createdAt','source','status'])
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
           && request.resource.data.status == 'active';
       }
 
-      allow create: if isSignedIn() || isValidPublicSubscription();
+      allow create: if isSignedIn() || isValidPublicCreate();
       allow update: if isSignedIn() || isPublicReactivationOnly();
-      allow read, delete: if isSignedIn();
+      allow get, list: if isSignedIn();
+      allow delete: if isSignedIn();
     }
 
     match /siteContent/{documentId} {
-      allow read: if documentId == 'home';
+      allow get: if true;
+      allow list: if true;
       allow create, update, delete: if isSignedIn();
     }
 
-
-    match /catalogProductOverrides/{productId} {
-      allow read, create, update, delete: if isSignedIn();
-    }
-
-    match /catalogSettings/{documentId} {
-      allow read, create, update, delete: if isSignedIn();
-    }
-
     match /contactMessages/{messageId} {
-      function isValidPublicContact() {
-        return request.resource.data.keys().hasOnly([
-          'name', 'email', 'phone', 'message', 'source', 'status', 'createdAt'
-        ])
-          && request.resource.data.keys().hasAll([
-            'name', 'email', 'phone', 'message', 'source', 'status', 'createdAt'
-          ])
+      function isValidPublicContactMessage() {
+        return
+          request.resource.data.keys().hasOnly(['name','email','phone','message','source','status','createdAt'])
+          && request.resource.data.keys().hasAll(['name','email','message','source','status','createdAt'])
           && request.resource.data.name is string
           && request.resource.data.name.size() >= 1
           && request.resource.data.name.size() <= 120
-          && request.resource.data.email is string
-          && request.resource.data.email.size() >= 3
-          && request.resource.data.email.size() <= 254
-          && request.resource.data.email.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')
-          && request.resource.data.phone is string
-          && request.resource.data.phone.size() <= 40
+          && isValidEmail(request.resource.data.email)
           && request.resource.data.message is string
           && request.resource.data.message.size() >= 1
-          && request.resource.data.message.size() <= 3000
+          && request.resource.data.message.size() <= 5000
+          && (!request.resource.data.keys().hasAny(['phone']) || (request.resource.data.phone is string && request.resource.data.phone.size() <= 40))
           && request.resource.data.source == 'nauticahome.com.mx'
           && request.resource.data.status == 'unread'
           && request.resource.data.createdAt == request.time;
       }
 
-      allow create: if isSignedIn() || isValidPublicContact();
-      allow read, update, delete: if isSignedIn();
+      allow create: if isSignedIn() || isValidPublicContactMessage();
+      allow get, list: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
+    }
+
+    match /catalogProductOverrides/{productId} {
+      allow get, list: if true;
+      allow create, update, delete: if isSignedIn();
+    }
+
+    match /catalogSettings/{documentId} {
+      allow get, list: if isSignedIn();
+      allow create, update, delete: if isSignedIn();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

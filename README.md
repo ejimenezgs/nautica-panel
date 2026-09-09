@@ -1,4 +1,4 @@
-# Nautica Panel v8 v7 — Productos + Web Design + Mensajes + cPanel Assets
+# Nautica Panel v10 — Productos + Web Design + Mensajes + cPanel Assets
 
 Base real de esta versión: `nautica-panel-main(1).zip` (continuidad directa de v6).
 Firebase existente: `nautica-ca65d`.
@@ -140,3 +140,21 @@ Para activar los overrides en producción, publicar también el bloque `catalogP
 - El encabezado Estado incluye un toggle master que activa/desactiva la visibilidad de todo el catálogo cargado.
 - Los cambios guardan exclusivamente el override `hidden` en `catalogProductOverrides`; SKU, precio y stock continúan viniendo de Segel ERP.
 - El toggle master soporta estado intermedio cuando solo una parte del catálogo está visible y usa batches de Firestore para catálogos grandes.
+
+## v10 — Categorías y subcategorías de Productos
+
+- Productos deja de depender de una categoría plana y pasa a una taxonomía reutilizable por Panel/Home/Shop: `Categoría -> Subcategoría -> Producto`.
+- Categorías principales: `Indoor`, `Outdoor`, `Decoración`, `Baño`; cuando no existe evidencia suficiente se usa `Sin clasificar`.
+- La clasificación está centralizada en `js/product-classification.js` y nunca modifica el payload original de Segel ERP.
+- Prioridad: override manual -> campos explícitos de API -> nombre -> descripción/tags como último fallback.
+- El clasificador inspecciona campos explícitos del payload como `categoria/category`, `subcategoria/subcategory`, `familia/family`, `linea/line`, `grupo/group`, `rubro`, `clasificacion/classification` y `tipo/productType`, incluso cuando aparecen anidados.
+- En el catálogo actual aparecen rutas descriptivas compuestas (por ejemplo valores tipo `Decor / Side Table / Accent Table`), por lo que se preserva la señal explícita completa y se evalúa antes de inferir por nombre.
+- Subcategorías implementadas:
+  - Indoor: Sofás, Sillones, Sillas, Bancos, Mesas de comedor, Mesas de centro, Mesas auxiliares, Comedores, Recámaras, Camas, Mesas de noche, Buffets y consolas, Escritorios, Bares, Otros.
+  - Outdoor: Salas exteriores, Sillas exteriores, Mesas exteriores, Camastros, Comedores exteriores, Bancos exteriores, Otros.
+  - Decoración: Accesorios, Espejos, Lámparas, Cuadros, Mesas decorativas, Objetos decorativos, Otros.
+  - Baño: Lavabos, Grifería, Regaderas, Accesorios de baño, Muebles de baño, Otros.
+- El filtro de Productos es jerárquico, muestra contadores por categoría/subcategoría y conserva búsqueda, estado, paginación y orden por stock.
+- El editor muestra categoría/subcategoría original de API, clasificación automática y clasificación final; los overrides se seleccionan con selects dependientes.
+- Overrides canónicos: `categoryOverride` y `subcategoryOverride`. Por compatibilidad con la versión pública existente también se mantienen sincronizados `customCategory` y `customSubcategory`.
+- No cambia SKU, stock, precio, imágenes, Auth, Newsletter, Web Design, assets, endpoints ni deploy.

@@ -110,7 +110,6 @@
             </div>
             <div class="products-filters">
               <label class="product-search-field"><span>Buscar</span><input id="productSearch" type="search" placeholder="Nombre, SKU, categoría…" autocomplete="off"></label>
-              <label><span>Categoría</span><select id="productCategoryFilter"><option value="all">Todas</option></select></label>
               <label><span>Estado</span><select id="productStatusFilter">
                 <option value="all">Todos</option>
                 <option value="available">Disponibles</option>
@@ -120,6 +119,7 @@
                 <option value="hidden">Ocultos</option>
               </select></label>
             </div>
+            <div id="productClassificationTree" class="product-classification-tree" aria-label="Categorías y subcategorías"></div>
             <div id="productsLoading" class="products-state">Cargando productos…</div>
             <div id="productsWarning" class="products-warning is-hidden" aria-live="polite"></div>
             <div id="productsError" class="products-state products-state--error is-hidden"><strong>No se pudieron cargar los productos.</strong><span id="productsErrorText"></span><button id="retryProductsButton" class="secondary-button compact" type="button">Reintentar</button></div>
@@ -205,6 +205,9 @@
           <div><dt>Stock</dt><dd id="productApiStock">—</dd></div>
           <div><dt>Categoría original</dt><dd id="productApiCategory">—</dd></div>
           <div><dt>Subcategoría original</dt><dd id="productApiSubcategory">—</dd></div>
+          <div><dt>Clasificación API</dt><dd id="productApiClassification">—</dd></div>
+          <div><dt>Categoría final</dt><dd id="productFinalCategory">—</dd></div>
+          <div><dt>Subcategoría final</dt><dd id="productFinalSubcategory">—</dd></div>
         </dl></div>
       </section>
 
@@ -213,8 +216,8 @@
         <div class="product-editor-grid">
           <label class="editor-field"><span>Nombre personalizado</span><input id="productCustomName" type="text" placeholder="Usar nombre de API"></label>
           <label class="editor-field"><span>Precio promocional</span><input id="productPromoPrice" type="number" min="0" step="0.01" placeholder="Sin promoción"></label>
-          <label class="editor-field"><span>Categoría personalizada</span><input id="productCustomCategory" type="text" placeholder="Usar categoría de API"></label>
-          <label class="editor-field"><span>Subcategoría personalizada</span><input id="productCustomSubcategory" type="text" placeholder="Usar subcategoría de API"></label>
+          <label class="editor-field"><span>Categoría</span><select id="productCustomCategory"><option value="">Automática</option></select><small>Override manual. Si queda en Automática se usa API + reglas.</small></label>
+          <label class="editor-field"><span>Subcategoría</span><select id="productCustomSubcategory"><option value="">Automática</option></select><small>Las opciones cambian según la categoría seleccionada.</small></label>
           <label class="editor-field editor-field-wide"><span>Descripción personalizada</span><textarea id="productCustomDescription" placeholder="Usar descripción de API"></textarea></label>
           <div class="editor-field editor-field-wide product-image-override">
             <span>Imagen personalizada</span>
