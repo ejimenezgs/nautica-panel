@@ -17,7 +17,8 @@ import {
   query,
   serverTimestamp,
   setDoc,
-  updateDoc
+  updateDoc,
+  writeBatch
 } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 import {
   firebaseConfig,
@@ -149,6 +150,7 @@ const retryProductsButton = document.querySelector("#retryProductsButton");
 const productSearch = document.querySelector("#productSearch");
 const productCategoryFilter = document.querySelector("#productCategoryFilter");
 const productStatusFilter = document.querySelector("#productStatusFilter");
+const toggleAllProducts = document.querySelector("#toggleAllProducts");
 const productsLoading = document.querySelector("#productsLoading");
 const productsError = document.querySelector("#productsError");
 const productsErrorText = document.querySelector("#productsErrorText");
@@ -541,6 +543,7 @@ function applyProductFilters() {
   renderProductStats();
   renderProductsTable();
   renderProductPagination();
+  updateProductVisibilityMaster();
 }
 
 function renderProductStats() {
@@ -580,10 +583,78 @@ function renderProductsTable() {
       <td>${escapeHtml(category)}</td>
       <td><div class="product-price-cell">${productPriceMarkup(product)}</div></td>
       <td><span class="stock-pill stock-pill--${stock.key}">${escapeHtml(stock.label)}</span><small class="stock-number">${escapeHtml(String(product.stock))}</small></td>
-      <td><span class="visibility-pill ${product.hidden ? "is-hidden-product" : ""}">${product.hidden ? "Oculto" : "Visible"}</span>${product.featured ? '<span class="featured-pill">Destacado</span>' : ""}</td>
+      <td><div class="product-visibility-cell"><label class="visibility-toggle" title="${product.hidden ? "Mostrar producto en la web" : "Ocultar producto de la web"}"><input type="checkbox" data-product-visibility="${escapeAttr(product.code)}" ${product.hidden ? "" : "checked"} aria-label="Visibilidad de ${escapeAttr(product.displayName)}"><span class="visibility-toggle__track"></span></label>${product.featured ? '<span class="featured-pill">Destacado</span>' : ""}</div></td>
       <td><button class="row-action product-edit-button" type="button" data-product-code="${escapeAttr(product.code)}" aria-label="Editar ${escapeAttr(product.displayName)}">•••</button></td>
     </tr>`;
   }).join("");
+}
+
+function updateProductVisibilityMaster() {
+  if (!toggleAllProducts) return;
+  const views = productsCache.map(effectiveProduct);
+  const visibleCount = views.filter((product) => !product.hidden).length;
+  toggleAllProducts.checked = views.length > 0 && visibleCount === views.length;
+  toggleAllProducts.indeterminate = visibleCount > 0 && visibleCount < views.length;
+  toggleAllProducts.disabled = productsLoadingNow || views.length === 0;
+}
+
+async function setProductVisibility(code, visible, input = null) {
+  const product = productsCache.find((item) => item.code === code);
+  if (!product) return;
+  const previous = productOverrides[code] || {};
+  const next = { ...previous, hidden: !visible };
+  if (input) input.disabled = true;
+  try {
+    await persistProductOverride(code, next);
+    applyProductFilters();
+  } catch (error) {
+    console.error("No se pudo actualizar la visibilidad del producto.", error);
+    if (input) input.checked = !visible;
+  } finally {
+    if (input) input.disabled = false;
+    updateProductVisibilityMaster();
+  }
+}
+
+async function setAllProductVisibility(visible) {
+  if (!toggleAllProducts || !db || !auth?.currentUser || !productsCache.length) return;
+  const desiredHidden = !visible;
+  toggleAllProducts.disabled = true;
+  const wrapper = toggleAllProducts.closest(".visibility-toggle");
+  wrapper?.classList.add("is-saving");
+
+  const entries = productsCache.map((product) => ({
+    code: product.code,
+    override: { ...(productOverrides[product.code] || {}), hidden: desiredHidden }
+  }));
+
+  try {
+    // Firestore batches are limited to 500 writes. Keep headroom for future additions.
+    for (let start = 0; start < entries.length; start += 450) {
+      const batch = writeBatch(db);
+      entries.slice(start, start + 450).forEach(({ code, override }) => {
+        const payload = {
+          ...override,
+          code,
+          updatedAt: serverTimestamp(),
+          updatedBy: auth.currentUser.email || "authenticated-user"
+        };
+        batch.set(doc(db, PRODUCT_OVERRIDES_COLLECTION, overrideDocId(code)), payload);
+      });
+      await batch.commit();
+    }
+    entries.forEach(({ code, override }) => {
+      productOverrides[code] = { ...override, code };
+    });
+    applyProductFilters();
+  } catch (error) {
+    console.error("No se pudo actualizar la visibilidad global.", error);
+    toggleAllProducts.checked = !visible;
+  } finally {
+    wrapper?.classList.remove("is-saving");
+    toggleAllProducts.disabled = false;
+    updateProductVisibilityMaster();
+  }
 }
 
 function renderProductPagination() {
@@ -799,6 +870,16 @@ productsNextPage?.addEventListener("click", () => { const max = Math.ceil(produc
 productsBody?.addEventListener("click", (event) => {
   const button = event.target.closest("[data-product-code]");
   if (button) openProductEditor(button.dataset.productCode);
+});
+
+productsBody?.addEventListener("change", (event) => {
+  const input = event.target.closest("[data-product-visibility]");
+  if (!input) return;
+  setProductVisibility(input.dataset.productVisibility, input.checked, input);
+});
+
+toggleAllProducts?.addEventListener("change", () => {
+  setAllProductVisibility(toggleAllProducts.checked);
 });
 productDrawerBackdrop?.addEventListener("click", closeProductEditor);
 closeProductDrawerButton?.addEventListener("click", closeProductEditor);

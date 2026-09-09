@@ -133,3 +133,10 @@ Para activar los overrides en producción, publicar también el bloque `catalogP
 - Productos carga primero la API y después los overrides. Si Firestore no permite leer `catalogProductOverrides`, el inventario sigue visible y se muestra una advertencia en lugar de bloquear toda la pestaña.
 - `firestore.rules` incluye permisos autenticados para `catalogProductOverrides` y `catalogSettings`.
 - El contador textual de Newsletter quedó centrado y con mayor padding vertical.
+
+## v9 — Visibilidad directa de productos
+
+- La columna Estado ahora usa un toggle individual por producto, igual al flujo de Casa Glick Panel.
+- El encabezado Estado incluye un toggle master que activa/desactiva la visibilidad de todo el catálogo cargado.
+- Los cambios guardan exclusivamente el override `hidden` en `catalogProductOverrides`; SKU, precio y stock continúan viniendo de Segel ERP.
+- El toggle master soporta estado intermedio cuando solo una parte del catálogo está visible y usa batches de Firestore para catálogos grandes.

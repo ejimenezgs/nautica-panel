@@ -125,7 +125,7 @@
             <div id="productsError" class="products-state products-state--error is-hidden"><strong>No se pudieron cargar los productos.</strong><span id="productsErrorText"></span><button id="retryProductsButton" class="secondary-button compact" type="button">Reintentar</button></div>
             <div class="table-wrap" id="productsTableWrap">
               <table class="products-table">
-                <thead><tr><th>Imagen</th><th>SKU</th><th>Producto</th><th>Categoría</th><th>Precio</th><th>Stock</th><th>Estado</th><th>Acciones</th></tr></thead>
+                <thead><tr><th>Imagen</th><th>SKU</th><th>Producto</th><th>Categoría</th><th>Precio</th><th>Stock</th><th><span class="product-status-heading">Estado <label class="visibility-toggle visibility-toggle--master" title="Activar o desactivar la visibilidad de todos los productos"><input id="toggleAllProducts" type="checkbox" aria-label="Mostrar todos los productos en la web"><span class="visibility-toggle__track"></span></label></span></th><th>Acciones</th></tr></thead>
                 <tbody id="productsBody"></tbody>
               </table>
             </div>
