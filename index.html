@@ -110,6 +110,8 @@
             </div>
             <div class="products-filters">
               <label class="product-search-field"><span>Buscar</span><input id="productSearch" type="search" placeholder="Nombre, SKU, categoría…" autocomplete="off"></label>
+              <label><span>Categoría</span><select id="productCategoryFilter"><option value="all">Todas las categorías</option></select></label>
+              <label><span>Subcategoría</span><select id="productSubcategoryFilter"><option value="all">Todas las subcategorías</option></select></label>
               <label><span>Estado</span><select id="productStatusFilter">
                 <option value="all">Todos</option>
                 <option value="available">Disponibles</option>
@@ -119,7 +121,6 @@
                 <option value="hidden">Ocultos</option>
               </select></label>
             </div>
-            <div id="productClassificationTree" class="product-classification-tree" aria-label="Categorías y subcategorías"></div>
             <div id="productsLoading" class="products-state">Cargando productos…</div>
             <div id="productsWarning" class="products-warning is-hidden" aria-live="polite"></div>
             <div id="productsError" class="products-state products-state--error is-hidden"><strong>No se pudieron cargar los productos.</strong><span id="productsErrorText"></span><button id="retryProductsButton" class="secondary-button compact" type="button">Reintentar</button></div>

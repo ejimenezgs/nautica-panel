@@ -153,7 +153,8 @@ const todayCount = document.querySelector("#todayCount");
 const refreshProductsButton = document.querySelector("#refreshProductsButton");
 const retryProductsButton = document.querySelector("#retryProductsButton");
 const productSearch = document.querySelector("#productSearch");
-const productClassificationTree = document.querySelector("#productClassificationTree");
+const productCategoryFilter = document.querySelector("#productCategoryFilter");
+const productSubcategoryFilter = document.querySelector("#productSubcategoryFilter");
 const productStatusFilter = document.querySelector("#productStatusFilter");
 const toggleAllProducts = document.querySelector("#toggleAllProducts");
 const productsLoading = document.querySelector("#productsLoading");
@@ -518,9 +519,9 @@ async function loadProducts() {
 }
 
 function rebuildProductClassificationTree() {
-  if (!productClassificationTree) return;
   const views = productsCache.map(effectiveProduct);
   const counts = new Map();
+
   views.forEach((product) => {
     const category = product.displayCategory || "Sin clasificar";
     const subcategory = product.displaySubcategory || (category === "Sin clasificar" ? "Sin clasificar" : "Otros");
@@ -531,20 +532,41 @@ function rebuildProductClassificationTree() {
   });
 
   const orderedCategories = [...Object.keys(PRODUCT_TAXONOMY)].filter((category) => counts.has(category));
-  const allActive = productClassificationFilter.category === "all";
-  const chunks = [`<button class="classification-filter classification-filter--all ${allActive ? "active" : ""}" type="button" data-category-filter="all"><span>Todos</span><strong>${views.length}</strong></button>`];
-  orderedCategories.forEach((category) => {
-    const entry = counts.get(category);
-    const categoryActive = productClassificationFilter.category === category && productClassificationFilter.subcategory === "all";
-    const subRows = taxonomySubcategories(category)
-      .filter((subcategory) => entry.subcategories.has(subcategory))
-      .map((subcategory) => {
-        const active = productClassificationFilter.category === category && productClassificationFilter.subcategory === subcategory;
-        return `<button class="classification-subfilter ${active ? "active" : ""}" type="button" data-category-filter="${escapeAttr(category)}" data-subcategory-filter="${escapeAttr(subcategory)}"><span>${escapeHtml(subcategory)}</span><strong>${entry.subcategories.get(subcategory)}</strong></button>`;
-      }).join("");
-    chunks.push(`<div class="classification-group"><button class="classification-filter ${categoryActive ? "active" : ""}" type="button" data-category-filter="${escapeAttr(category)}"><span>${escapeHtml(category)}</span><strong>${entry.total}</strong></button><div class="classification-subfilters">${subRows}</div></div>`);
-  });
-  productClassificationTree.innerHTML = chunks.join("");
+
+  if (productCategoryFilter) {
+    productCategoryFilter.innerHTML = [
+      `<option value="all">Todas las categorías (${views.length})</option>`,
+      ...orderedCategories.map((category) => `<option value="${escapeAttr(category)}">${escapeHtml(category)} (${counts.get(category).total})</option>`)
+    ].join("");
+    productCategoryFilter.value = orderedCategories.includes(productClassificationFilter.category) ? productClassificationFilter.category : "all";
+    productClassificationFilter.category = productCategoryFilter.value;
+  }
+
+  if (productSubcategoryFilter) {
+    const selectedCategory = productClassificationFilter.category;
+    let subcategories = [];
+    if (selectedCategory !== "all" && counts.has(selectedCategory)) {
+      subcategories = taxonomySubcategories(selectedCategory).filter((subcategory) => counts.get(selectedCategory).subcategories.has(subcategory));
+    } else {
+      const merged = new Map();
+      counts.forEach((entry) => entry.subcategories.forEach((count, subcategory) => merged.set(subcategory, (merged.get(subcategory) || 0) + count)));
+      subcategories = [...merged.keys()].sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
+    }
+
+    const totalForLabel = selectedCategory === "all" ? views.length : (counts.get(selectedCategory)?.total || 0);
+    productSubcategoryFilter.innerHTML = [
+      `<option value="all">Todas las subcategorías (${totalForLabel})</option>`,
+      ...subcategories.map((subcategory) => {
+        const count = selectedCategory === "all"
+          ? views.filter((product) => product.displaySubcategory === subcategory).length
+          : (counts.get(selectedCategory)?.subcategories.get(subcategory) || 0);
+        return `<option value="${escapeAttr(subcategory)}">${escapeHtml(subcategory)} (${count})</option>`;
+      })
+    ].join("");
+
+    if (!subcategories.includes(productClassificationFilter.subcategory)) productClassificationFilter.subcategory = "all";
+    productSubcategoryFilter.value = productClassificationFilter.subcategory;
+  }
 }
 
 function applyProductFilters() {
@@ -612,14 +634,8 @@ function renderProductsTable() {
   }
   const start = (productPage - 1) * PRODUCT_PAGE_SIZE;
   const pageRows = productsFiltered.slice(start, start + PRODUCT_PAGE_SIZE);
-  let lastGroup = "";
   const html = [];
   pageRows.forEach((product) => {
-    const groupKey = `${product.displayCategory}::${product.displaySubcategory}`;
-    if (groupKey !== lastGroup) {
-      html.push(`<tr class="product-group-row"><td colspan="8"><strong>${escapeHtml(product.displayCategory)}</strong><span>${escapeHtml(product.displaySubcategory)}</span></td></tr>`);
-      lastGroup = groupKey;
-    }
     const stock = stockState(product.stock);
     const category = [product.displayCategory, product.displaySubcategory].filter(Boolean).join(" / ") || "—";
     const image = product.displayImageUrl;
@@ -932,15 +948,16 @@ resetCatalogApiUrlButton?.addEventListener("click", () => {
 refreshProductsButton?.addEventListener("click", loadProducts);
 retryProductsButton?.addEventListener("click", loadProducts);
 productSearch?.addEventListener("input", () => { productPage = 1; applyProductFilters(); });
-productClassificationTree?.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-category-filter]");
-  if (!button) return;
-  productClassificationFilter = {
-    category: button.dataset.categoryFilter || "all",
-    subcategory: button.dataset.subcategoryFilter || "all"
-  };
+productCategoryFilter?.addEventListener("change", () => {
+  productClassificationFilter.category = productCategoryFilter.value || "all";
+  productClassificationFilter.subcategory = "all";
   productPage = 1;
   rebuildProductClassificationTree();
+  applyProductFilters();
+});
+productSubcategoryFilter?.addEventListener("change", () => {
+  productClassificationFilter.subcategory = productSubcategoryFilter.value || "all";
+  productPage = 1;
   applyProductFilters();
 });
 productStatusFilter?.addEventListener("change", () => { productPage = 1; applyProductFilters(); });

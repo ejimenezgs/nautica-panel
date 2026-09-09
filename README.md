@@ -158,3 +158,10 @@ Para activar los overrides en producción, publicar también el bloque `catalogP
 - El editor muestra categoría/subcategoría original de API, clasificación automática y clasificación final; los overrides se seleccionan con selects dependientes.
 - Overrides canónicos: `categoryOverride` y `subcategoryOverride`. Por compatibilidad con la versión pública existente también se mantienen sincronizados `customCategory` y `customSubcategory`.
 - No cambia SKU, stock, precio, imágenes, Auth, Newsletter, Web Design, assets, endpoints ni deploy.
+
+## v11 — Product filters UI
+- Replaced the large category/subcategory classification block with compact Category and Subcategory select pickers in the Products toolbar, matching the Casa Glick interaction pattern.
+- Category and subcategory counts remain available inside the picker options.
+- Subcategory options update based on the selected category.
+- Removed category/subcategory divider rows from the product table; products now render as one continuous list.
+- Classification, Firebase overrides, SKU, stock, pricing, visibility toggles and inventory API behavior remain unchanged.

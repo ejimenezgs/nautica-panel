@@ -39,3 +39,11 @@
 @media(max-width:1100px){.products-filters{grid-template-columns:1fr 190px}.product-search-field{grid-column:auto}.product-classification-tree{padding-left:18px;padding-right:18px}}
 @media(max-width:720px){.products-filters{grid-template-columns:1fr}.product-classification-tree{padding:12px 14px}.classification-group{min-width:145px}.classification-filter--all{min-width:100px}}
 .product-group-row td{padding:10px 18px!important;background:#f3f1ec;border-top:1px solid var(--border);border-bottom:1px solid var(--border);color:#5e5952}.product-group-row strong{font-size:9px;letter-spacing:.05em;text-transform:uppercase}.product-group-row span{margin-left:8px;font-size:8px;color:var(--muted)}
+
+
+/* v11 · Filtros de categoría/subcategoría estilo Casa Glick */
+.products-filters{grid-template-columns:minmax(280px,1.35fr) minmax(150px,.7fr) minmax(170px,.8fr) minmax(150px,.62fr);align-items:end}
+.product-classification-tree{display:none!important}
+.product-group-row{display:none!important}
+@media(max-width:1180px){.products-filters{grid-template-columns:1fr 1fr}.product-search-field{grid-column:1/-1}}
+@media(max-width:720px){.products-filters{grid-template-columns:1fr}.product-search-field{grid-column:auto}}
