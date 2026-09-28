@@ -60,13 +60,13 @@ const DEFAULT_HOME_CONTENT = {
   sections: {
     hero: {
       enabled: true,
-      imageUrl: "",
-      mobileImageUrl: "",
-      useVideo: false,
-      videoUrl: "",
       rotationSeconds: 6,
-      banners: [
-        { enabled: true, imageUrl: "", mobileImageUrl: "", alt: "Nautica Home" }
+      categories: [
+        { key: "indoor", label: "INTERIOR", enabled: true, imageUrl: "", mobileImageUrl: "", useVideo: false, videoUrl: "", mobileVideoUrl: "", alt: "Nautica Home Interior" },
+        { key: "outdoor", label: "EXTERIOR", enabled: true, imageUrl: "", mobileImageUrl: "", useVideo: false, videoUrl: "", mobileVideoUrl: "", alt: "Nautica Home Exterior" },
+        { key: "decor", label: "DECORACIÓN", enabled: true, imageUrl: "", mobileImageUrl: "", useVideo: false, videoUrl: "", mobileVideoUrl: "", alt: "Nautica Home Decoración" },
+        { key: "sanitary", label: "BAÑOS", enabled: true, imageUrl: "", mobileImageUrl: "", useVideo: false, videoUrl: "", mobileVideoUrl: "", alt: "Nautica Home Baños" },
+        { key: "lighting", label: "ILUMINACIÓN", enabled: true, imageUrl: "", mobileImageUrl: "", useVideo: false, videoUrl: "", mobileVideoUrl: "", alt: "Nautica Home Iluminación" }
       ]
     },
     products: {
@@ -82,13 +82,13 @@ const DEFAULT_HOME_CONTENT = {
     },
     about: {
       enabled: true,
-      kicker: "NOSOTROS",
+      kicker: "HISTORIA",
       title: "Inspirados por el mar.\nDiseñados para vivir.",
       paragraph1: "En Nautica Home transformamos los espacios cotidianos en refugios de bienestar, combinando la elegancia costera con un estilo contemporáneo y atemporal.",
       paragraph2: "Cada colección refleja nuestra pasión por los detalles, los materiales de calidad y la creación de ambientes que invitan a disfrutar lo esencial.",
       imageUrl: "",
       ctaLabel: "Explorar colecciones",
-      ctaHref: "#colecciones"
+      ctaHref: "productos.html"
     },
     retailers: {
       enabled: true,
@@ -111,7 +111,16 @@ const DEFAULT_HOME_CONTENT = {
       kicker: "INSPIRACIÓN",
       title: "Espacios que inspiran",
       copy: "Ideas, ambientes y detalles que llevan el espíritu Nautica Home a cada espacio.",
-      items: Array.from({ length: 16 }, () => ({ enabled: true, imageUrl: "" }))
+      items: [
+        { enabled: true, category: "indoor", imageUrl: "", alt: "Inspiración Indoor" },
+        { enabled: true, category: "indoor", imageUrl: "", alt: "Inspiración Indoor" },
+        { enabled: true, category: "outdoor", imageUrl: "", alt: "Inspiración Outdoor" },
+        { enabled: true, category: "outdoor", imageUrl: "", alt: "Inspiración Outdoor" },
+        { enabled: true, category: "decor", imageUrl: "", alt: "Inspiración Decor" },
+        { enabled: true, category: "decor", imageUrl: "", alt: "Inspiración Decor" },
+        { enabled: true, category: "bedroom", imageUrl: "", alt: "Inspiración Bedroom" },
+        { enabled: true, category: "bath", imageUrl: "", alt: "Inspiración Bath" }
+      ]
     },
     newsletter: {
       enabled: true,
@@ -124,8 +133,9 @@ const DEFAULT_HOME_CONTENT = {
     contact: {
       enabled: true,
       kicker: "CONTACTO",
-      title: "Hablemos de\ntu espacio",
-      copy: "Cuéntanos qué estás buscando y nuestro equipo te ayudará a encontrar la mejor solución para tu proyecto."
+      title: "¿Necesitas ayuda?",
+      copy: "Estamos aquí para ayudarte con información de producto, disponibilidad, puntos de venta y cualquier detalle relacionado con tu experiencia Nautica Home.",
+      imageUrl: ""
     }
   }
 };
@@ -1128,14 +1138,20 @@ function normalizeEditorContent(data) {
   if (!Array.isArray(data?.utility?.messages) || !data.utility.messages.length) {
     merged.utility.messages = [{ enabled: true, text: data?.utility?.message || merged.utility.message }];
   }
-  if (!Array.isArray(data?.sections?.hero?.banners) || !data.sections.hero.banners.length) {
-    merged.sections.hero.banners = [{
-      enabled: true,
-      imageUrl: data?.sections?.hero?.imageUrl || "",
-      mobileImageUrl: data?.sections?.hero?.mobileImageUrl || "",
-      alt: "Nautica Home"
-    }];
+  if (!Array.isArray(data?.sections?.hero?.categories) || !data.sections.hero.categories.length) {
+    const legacyProducts = Array.isArray(data?.sections?.products?.items) ? data.sections.products.items : [];
+    const byIndex = { indoor: 0, outdoor: 1, decor: 4, sanitary: 3, lighting: 5 };
+    merged.sections.hero.categories = DEFAULT_HOME_CONTENT.sections.hero.categories.map((item) => {
+      const legacy = legacyProducts[byIndex[item.key]] || {};
+      return { ...item, imageUrl: legacy.imageUrl || "", mobileImageUrl: legacy.mobileImageUrl || "" };
+    });
   }
+  merged.sections.inspiration.items = (merged.sections.inspiration.items || []).map((item, index) => ({
+    enabled: item?.enabled !== false,
+    category: item?.category || ["indoor","indoor","outdoor","outdoor","decor","decor","bedroom","bath"][index % 8],
+    imageUrl: item?.imageUrl || "",
+    alt: item?.alt || "Inspiración Nautica Home"
+  }));
   return merged;
 }
 
@@ -1166,38 +1182,25 @@ function renderWebDesignForm(data, reopenKey = "") {
       textField("WhatsApp URL", "globalSettings.whatsappUrl", g.whatsappUrl),
       textField("Copyright footer", "footer.copyright", f.copyright)
     ]),
-    editorSection("Hero", "hero", "Banners desktop y móvil con rotación automática.", [
+    editorSection("Hero por categorías", "hero", "Media del hero editorial. Cada categoría puede usar imagen o video; el tiempo controla también la barra de progreso.", [
       toggleField("Sección activa", "sections.hero.enabled", s.hero.enabled),
       numberField("Cambio automático (segundos)", "sections.hero.rotationSeconds", s.hero.rotationSeconds || 6, 3, 30),
-      ...s.hero.banners.flatMap((banner, index) => [
-        nestedEditor(`Banner ${index + 1}`, "Cada banner usa un archivo específico para desktop y otro para móvil.", [
-          `<div class="repeatable-card repeatable-card--plain" data-repeatable="hero-banner" data-index="${index}">`,
-          `<div class="repeatable-card__head"><strong>Configuración</strong>${s.hero.banners.length > 1 ? `<button class="text-button danger-text" type="button" data-remove-hero-banner="${index}">Eliminar banner</button>` : ""}</div>`,
-          toggleField("Activo", `sections.hero.banners.${index}.enabled`, banner.enabled),
-          textField("Alt text", `sections.hero.banners.${index}.alt`, banner.alt || "Nautica Home"),
-          imageField("Banner desktop", `sections.hero.banners.${index}.imageUrl`, banner.imageUrl, `hero`, "image/*", "1920 × 620 px", "desktop"),
-          imageField("Banner móvil", `sections.hero.banners.${index}.mobileImageUrl`, banner.mobileImageUrl, `hero`, "image/*", "1080 × 1080 px", "mobile"),
+      ...s.hero.categories.flatMap((item, index) => [
+        nestedEditor(item.label || item.key.toUpperCase(), "Imagen/video de esta categoría en el hero.", [
+          `<div class="repeatable-card repeatable-card--plain" data-repeatable="hero-category" data-index="${index}">`,
+          toggleField("Activa", `sections.hero.categories.${index}.enabled`, item.enabled),
+          textField("Label", `sections.hero.categories.${index}.label`, item.label),
+          textField("Alt text", `sections.hero.categories.${index}.alt`, item.alt || `Nautica Home ${item.label || ""}`),
+          imageField("Imagen desktop", `sections.hero.categories.${index}.imageUrl`, item.imageUrl, `hero-${item.key}-desktop`, "image/*", "1920 × 1080 px", "desktop"),
+          imageField("Imagen móvil", `sections.hero.categories.${index}.mobileImageUrl`, item.mobileImageUrl, `hero-${item.key}-mobile`, "image/*", "1080 × 1350 px", "mobile"),
+          toggleField("Usar video", `sections.hero.categories.${index}.useVideo`, item.useVideo),
+          imageField("Video desktop", `sections.hero.categories.${index}.videoUrl`, item.videoUrl, `hero-${item.key}-video`, "video/*", "MP4/WebM · máx. 150 MB"),
+          imageField("Video móvil", `sections.hero.categories.${index}.mobileVideoUrl`, item.mobileVideoUrl, `hero-${item.key}-video-mobile`, "video/*", "MP4/WebM · máx. 150 MB"),
           `</div>`
         ])
-      ]),
-      `<button class="secondary-button compact add-item-button" type="button" data-add-hero-banner>+ Agregar banner</button>`,
-      nestedEditor("Video opcional", "Mantiene compatibilidad con el video existente del hero.", [
-        toggleField("Usar video", "sections.hero.useVideo", s.hero.useVideo),
-        imageField("Video del hero", "sections.hero.videoUrl", s.hero.videoUrl, "hero-video", "video/*", "MP4/WebM · máx. 150 MB")
       ])
     ]),
-    editorSection("Productos / Categorías", "products", "Categorías visibles en el carrusel de productos.", [
-      toggleField("Sección activa", "sections.products.enabled", s.products.enabled),
-      ...s.products.items.flatMap((item, index) => [
-        nestedEditor(`Categoría ${index + 1} · ${escapeHtml(item.label || "Sin nombre")}`, "Imagen, nombre, visibilidad y destino.", [
-          toggleField("Activa", `sections.products.items.${index}.enabled`, item.enabled),
-          textField("Nombre", `sections.products.items.${index}.label`, item.label),
-          imageField("Imagen", `sections.products.items.${index}.imageUrl`, item.imageUrl, `products-${index}`, "image/*", "1800 × 1000 px · relación 1.8:1"),
-          textField("Link", `sections.products.items.${index}.link`, item.link)
-        ])
-      ])
-    ]),
-    editorSection("Nosotros", "about", "Contenido editorial de la sección Nosotros.", [
+    editorSection("Historia", "about", "Contenido editorial del bloque Historia en el landing.", [
       toggleField("Sección activa", "sections.about.enabled", s.about.enabled),
       textField("Eyebrow", "sections.about.kicker", s.about.kicker),
       textareaField("Título", "sections.about.title", s.about.title),
@@ -1220,17 +1223,17 @@ function renderWebDesignForm(data, reopenKey = "") {
         ])
       ])
     ]),
-    editorSection("Inspiración", "inspiration", "Galería visual y textos de inspiración.", [
+    editorSection("Inspiración", "inspiration", "Carrusel editorial horizontal. Cada imagen puede clasificarse para los filtros inferiores.", [
       toggleField("Sección activa", "sections.inspiration.enabled", s.inspiration.enabled),
-      textField("Eyebrow", "sections.inspiration.kicker", s.inspiration.kicker),
-      textField("Título", "sections.inspiration.title", s.inspiration.title),
-      textareaField("Descripción", "sections.inspiration.copy", s.inspiration.copy),
       ...s.inspiration.items.flatMap((item, index) => [
-        nestedEditor(`Imagen ${index + 1}`, "Imagen individual de la galería.", [
-          toggleField("Activa", `sections.inspiration.items.${index}.enabled`, item.enabled),
-          imageField("Imagen", `sections.inspiration.items.${index}.imageUrl`, item.imageUrl, `inspiration-${index}`, "image/*", "1200 × 1200 px · cuadrada")
-        ])
-      ])
+        `<div class="repeatable-card" data-repeatable="inspiration-item" data-index="${index}"><div class="repeatable-card__head"><strong>Imagen ${index + 1}</strong><button class="text-button danger-text" type="button" data-remove-inspiration-item="${index}">Eliminar</button></div>`,
+        toggleField("Activa", `sections.inspiration.items.${index}.enabled`, item.enabled),
+        selectField("Categoría", `sections.inspiration.items.${index}.category`, item.category || "indoor", [["indoor","INDOOR"],["outdoor","OUTDOOR"],["decor","DECOR"],["bedroom","BEDROOM"],["bath","BATH"]]),
+        textField("Alt text", `sections.inspiration.items.${index}.alt`, item.alt || "Inspiración Nautica Home"),
+        imageField("Imagen", `sections.inspiration.items.${index}.imageUrl`, item.imageUrl, `inspiration-${index}`, "image/*", "Vertical / editorial · 1600 px o más"),
+        `</div>`
+      ]),
+      `<button class="secondary-button compact add-item-button" type="button" data-add-inspiration-item>+ Agregar imagen</button>`
     ]),
     editorSection("Newsletter", "newsletter", "Contenido visual y editorial del newsletter.", [
       toggleField("Sección activa", "sections.newsletter.enabled", s.newsletter.enabled),
@@ -1244,7 +1247,8 @@ function renderWebDesignForm(data, reopenKey = "") {
       toggleField("Sección activa", "sections.contact.enabled", s.contact.enabled),
       textField("Eyebrow", "sections.contact.kicker", s.contact.kicker),
       textareaField("Título", "sections.contact.title", s.contact.title),
-      textareaField("Descripción", "sections.contact.copy", s.contact.copy)
+      textareaField("Descripción", "sections.contact.copy", s.contact.copy),
+      imageField("Imagen", "sections.contact.imageUrl", s.contact.imageUrl, "contact", "image/*", "1600 × 1200 px · relación 4:3")
     ])
   ].join("");
 
@@ -1315,7 +1319,21 @@ function bindWebDesignControls() {
     markContentDirty();
   }));
 
-  webDesignForm.querySelectorAll("input[data-path],textarea[data-path]").forEach((field) => {
+  webDesignForm.querySelector("[data-add-inspiration-item]")?.addEventListener("click", () => {
+    const data = collectEditorData();
+    data.sections.inspiration.items = Array.isArray(data.sections.inspiration.items) ? data.sections.inspiration.items : [];
+    data.sections.inspiration.items.push({ enabled: true, category: "indoor", imageUrl: "", alt: "Inspiración Nautica Home" });
+    renderWebDesignForm(data, "inspiration");
+    markContentDirty();
+  });
+  webDesignForm.querySelectorAll("[data-remove-inspiration-item]").forEach((button) => button.addEventListener("click", () => {
+    const data = collectEditorData();
+    data.sections.inspiration.items.splice(Number(button.dataset.removeInspirationItem), 1);
+    renderWebDesignForm(data, "inspiration");
+    markContentDirty();
+  }));
+
+  webDesignForm.querySelectorAll("input[data-path],textarea[data-path],select[data-path]").forEach((field) => {
     field.addEventListener("input", () => markContentDirty());
     field.addEventListener("change", () => markContentDirty());
   });
@@ -1362,6 +1380,9 @@ function numberField(label, path, value, min, max) {
 }
 function textareaField(label, path, value) {
   return `<label class="editor-field editor-field-wide"><span>${escapeHtml(label)}</span><textarea rows="3" data-path="${escapeHtml(path)}">${escapeHtml(value ?? "")}</textarea></label>`;
+}
+function selectField(label, path, value, options) {
+  return `<label class="editor-field"><span>${escapeHtml(label)}</span><select data-path="${escapeHtml(path)}">${options.map(([optionValue, optionLabel]) => `<option value="${escapeAttr(optionValue)}" ${String(value) === String(optionValue) ? "selected" : ""}>${escapeHtml(optionLabel)}</option>`).join("")}</select></label>`;
 }
 function toggleField(label, path, value) {
   return `<label class="editor-toggle"><span>${escapeHtml(label)}</span><span class="toggle-control"><input type="checkbox" data-path="${escapeHtml(path)}" ${value !== false ? "checked" : ""} /><span class="toggle-track"></span></span></label>`;
@@ -1412,11 +1433,20 @@ saveContentButton.addEventListener("click", async () => {
     const data = collectEditorData();
     // Keep legacy single fields synchronized so older public builds remain compatible.
     data.utility.message = data.utility.messages?.find((item) => item?.enabled !== false && item?.text)?.text || data.utility.message || "";
-    const firstBanner = data.sections?.hero?.banners?.find((item) => item?.enabled !== false) || data.sections?.hero?.banners?.[0];
-    if (firstBanner) {
-      data.sections.hero.imageUrl = firstBanner.imageUrl || data.sections.hero.imageUrl || "";
-      data.sections.hero.mobileImageUrl = firstBanner.mobileImageUrl || data.sections.hero.mobileImageUrl || "";
+    const heroCategories = Array.isArray(data.sections?.hero?.categories) ? data.sections.hero.categories : [];
+    const firstHero = heroCategories.find((item) => item?.enabled !== false) || heroCategories[0];
+    if (firstHero) {
+      data.sections.hero.imageUrl = firstHero.imageUrl || "";
+      data.sections.hero.mobileImageUrl = firstHero.mobileImageUrl || "";
     }
+    const legacyMap = { indoor: 0, outdoor: 1, sanitary: 3, decor: 4, lighting: 5 };
+    data.sections.products = data.sections.products || structuredClone(DEFAULT_HOME_CONTENT.sections.products);
+    data.sections.products.items = Array.isArray(data.sections.products.items) ? data.sections.products.items : structuredClone(DEFAULT_HOME_CONTENT.sections.products.items);
+    heroCategories.forEach((item) => {
+      const legacyIndex = legacyMap[item.key];
+      if (legacyIndex === undefined) return;
+      data.sections.products.items[legacyIndex] = { ...(data.sections.products.items[legacyIndex] || {}), enabled: item.enabled !== false, imageUrl: item.imageUrl || "", mobileImageUrl: item.mobileImageUrl || "" };
+    });
     data.updatedAt = serverTimestamp();
     data.updatedBy = auth?.currentUser?.email || "authenticated-user";
     await setDoc(doc(db, SITE_CONTENT_COLLECTION, SITE_CONTENT_HOME_DOC), data, { merge: false });
