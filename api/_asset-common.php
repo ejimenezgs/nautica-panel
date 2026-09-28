@@ -109,7 +109,7 @@ function requirePanelAdmin(): array {
 
 function sectionDirectory(string $key): string {
     $key = strtolower(trim($key));
-    if ($key === 'hero' || $key === 'hero-video') return 'hero';
+    if ($key === 'hero' || $key === 'hero-video' || str_starts_with($key, 'hero-')) return 'hero';
     if (str_starts_with($key, 'products-')) return 'products';
     if (str_starts_with($key, 'catalog-product-')) return 'catalog-products';
     if ($key === 'about') return 'about';
