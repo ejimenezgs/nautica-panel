@@ -82,5 +82,21 @@ service cloud.firestore {
     match /{document=**} {
       allow read, write: if false;
     }
+    match /siteSettings/{id} {
+      allow read: if id == 'public';
+      allow write: if request.auth != null;
+    }
+    match /productWaitlist/{id} {
+      allow create: if request.resource.data.keys().hasOnly(['sku','productName','email','source','status','createdAt'])
+        && request.resource.data.keys().hasAll(['sku','productName','email','source','status','createdAt'])
+        && request.resource.data.sku is string && request.resource.data.sku.size() > 0 && request.resource.data.sku.size() <= 120
+        && request.resource.data.productName is string && request.resource.data.productName.size() <= 200
+        && request.resource.data.email is string && request.resource.data.email.size() <= 254
+        && request.resource.data.email.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')
+        && request.resource.data.source == 'product' && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt == request.time;
+      allow read, update, delete: if request.auth != null;
+    }
+
   }
 }

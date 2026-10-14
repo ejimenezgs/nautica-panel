@@ -267,7 +267,7 @@ if (isConfigured) {
       panelView.classList.remove("is-hidden");
       userEmail.textContent = user.email || "Usuario";
       if (sidebarUserEmail) sidebarUserEmail.textContent = user.email || "Usuario";
-      await Promise.all([loadNewsletter(), loadContent(), loadCatalogSettings()]);
+      await Promise.all([loadNewsletter(), loadContent(), loadCatalogSettings(), loadSiteModes()]);
       startMessagesListener();
     } else {
       stopMessagesListener();
@@ -321,7 +321,7 @@ window.addEventListener("resize", () => { if (window.innerWidth > 860) closeSide
 function setView(view) {
   navButtons.forEach((button) => button.classList.toggle("active", button.dataset.view === view));
   viewSections.forEach((section) => section.classList.toggle("is-hidden", section.dataset.panelView !== view));
-  const titles = { newsletter: "Newsletter", messages: "Mensajes", webdesign: "Web Design", products: "Productos", settings: "Configuración" };
+  const titles = { newsletter: "Newsletter", messages: "Mensajes", webdesign: "Web Design", products: "Productos", settings: "Configuración", waitlist: "Lista de espera" };
   viewTitle.textContent = titles[view] || "Nautica Panel";
   if (view === "products" && !productsLoaded && !productsLoadingNow) loadProducts();
   if (window.innerWidth <= 860) closeSidebar();
@@ -1736,3 +1736,28 @@ function escapeHtml(value) {
 function escapeAttr(value) {
   return escapeHtml(value).replaceAll("`", "&#096;");
 }
+
+// Oaxsun Technologies — website modes and product waitlist
+const modeDoc = () => doc(db, 'siteSettings', 'public');
+async function loadSiteModes() {
+  try { const snap=await getDoc(modeDoc()); const v=snap.data()||{};
+    document.getElementById('commerceMode').value=v.commerceMode==='catalog'?'catalog':'store';
+    document.getElementById('siteMode').value=v.siteMode==='maintenance'?'maintenance':'live';
+  } catch(e) { document.getElementById('siteModesMessage').textContent='No se pudo consultar la configuración.'; }
+}
+document.getElementById('saveSiteModes')?.addEventListener('click',async()=>{
+  const msg=document.getElementById('siteModesMessage');msg.textContent='Guardando…';
+  try {await setDoc(modeDoc(),{commerceMode:document.getElementById('commerceMode').value,siteMode:document.getElementById('siteMode').value,updatedAt:serverTimestamp()},{merge:true});msg.textContent='Configuración guardada.';}
+  catch(e){msg.textContent='Error al guardar: '+e.message;}
+});
+async function loadWaitlist(){
+  const tbody=document.getElementById('waitlistRows'),msg=document.getElementById('waitlistMessage');if(!db||!auth?.currentUser)return;
+  msg.textContent='Cargando…';
+  try {const snap=await getDocs(collection(db,'productWaitlist'));const filter=(document.getElementById('waitlistSearch').value||'').toLowerCase();tbody.replaceChildren();
+    const entries=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0)).filter(v=>[v.sku,v.productName,v.email].join(' ').toLowerCase().includes(filter));
+    for(const v of entries){const tr=document.createElement('tr');for(const field of ['sku','productName','email','status']){const td=document.createElement('td');td.textContent=String(v[field]||'—');tr.append(td)}const td=document.createElement('td'),btn=document.createElement('button');btn.className='secondary-button compact';btn.textContent=v.status==='notified'?'Marcar pendiente':'Marcar notificado';btn.onclick=async()=>{await updateDoc(doc(db,'productWaitlist',v.id),{status:v.status==='notified'?'pending':'notified'});loadWaitlist()};td.append(btn);tr.append(td);tbody.append(tr)}msg.textContent=entries.length+' solicitudes';
+  }catch(e){msg.textContent='Error al cargar solicitudes: '+e.message}
+}
+document.getElementById('refreshWaitlist')?.addEventListener('click',loadWaitlist);
+document.getElementById('waitlistSearch')?.addEventListener('input',loadWaitlist);
+document.querySelector('[data-view="waitlist"]')?.addEventListener('click',loadWaitlist);
