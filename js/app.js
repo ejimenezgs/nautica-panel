@@ -368,6 +368,7 @@ async function saveCatalogSettings() {
     }, { merge: true });
     catalogApiUrl = parsed.href;
     catalogApiUrlInput.value = catalogApiUrl;
+    await saveSiteModes();
     productsLoaded = false;
     catalogSettingsMessage.textContent = "Endpoint guardado. La próxima actualización usará esta URL.";
   } catch (error) {
@@ -1739,17 +1740,29 @@ function escapeAttr(value) {
 
 // Oaxsun Technologies — website modes and product waitlist
 const modeDoc = () => doc(db, 'siteSettings', 'public');
-async function loadSiteModes() {
-  try { const snap=await getDoc(modeDoc()); const v=snap.data()||{};
-    document.getElementById('commerceMode').value=v.commerceMode==='catalog'?'catalog':'store';
-    document.getElementById('siteMode').value=v.siteMode==='maintenance'?'maintenance':'live';
-  } catch(e) { document.getElementById('siteModesMessage').textContent='No se pudo consultar la configuración.'; }
+function syncModeSwitches(){
+ const commerce=document.getElementById('commerceMode').value;
+ const site=document.getElementById('siteMode').value;
+ document.getElementById('commerceModeSwitch').checked=commerce==='catalog';
+ document.getElementById('siteModeSwitch').checked=site==='maintenance';
+ document.getElementById('commerceModeDescription').textContent=commerce==='catalog'?'Catálogo: sin compras, con lista de espera.':'Tienda: compras y Stripe habilitados.';
+ document.getElementById('siteModeDescription').textContent=site==='maintenance'?'Mantenimiento: intro y newsletter.':'Live: el público puede ingresar.';
 }
-document.getElementById('saveSiteModes')?.addEventListener('click',async()=>{
-  const msg=document.getElementById('siteModesMessage');msg.textContent='Guardando…';
-  try {await setDoc(modeDoc(),{commerceMode:document.getElementById('commerceMode').value,siteMode:document.getElementById('siteMode').value,updatedAt:serverTimestamp()},{merge:true});msg.textContent='Configuración guardada.';}
-  catch(e){msg.textContent='Error al guardar: '+e.message;}
-});
+for(const [id,target,on,off] of [['commerceModeSwitch','commerceMode','catalog','store'],['siteModeSwitch','siteMode','maintenance','live']]){
+ document.getElementById(id)?.addEventListener('change',e=>{document.getElementById(target).value=e.target.checked?on:off;syncModeSwitches();});
+}
+async function loadSiteModes(){
+ try{const snap=await getDoc(modeDoc());const v=snap.data()||{};
+ document.getElementById('commerceMode').value=v.commerceMode==='catalog'?'catalog':'store';
+ document.getElementById('siteMode').value=v.siteMode==='maintenance'?'maintenance':'live';
+ syncModeSwitches();
+ }catch(e){document.getElementById('siteModesMessage').textContent='No se pudo consultar la configuración.';}
+}
+async function saveSiteModes(){
+ const msg=document.getElementById('siteModesMessage');msg.textContent='Guardando modos…';
+ try{await setDoc(modeDoc(),{commerceMode:document.getElementById('commerceMode').value,siteMode:document.getElementById('siteMode').value,updatedAt:serverTimestamp()},{merge:true});msg.textContent='Modos guardados.';}
+ catch(e){msg.textContent='Error al guardar modos: '+e.message;throw e;}
+}
 async function loadWaitlist(){
   const tbody=document.getElementById('waitlistRows'),msg=document.getElementById('waitlistMessage');if(!db||!auth?.currentUser)return;
   msg.textContent='Cargando…';
