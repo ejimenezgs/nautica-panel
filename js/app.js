@@ -1777,13 +1777,40 @@ async function saveSiteModes(){
    msg.textContent='Modos guardados correctamente.';
  }catch(e){msg.textContent='Error al guardar modos: '+e.message;throw e;}
 }
+const WAITLIST_SEND_URL='https://nauticahome.com.mx/api/brevo/send-waitlist.php';
+const WAITLIST_STATUS_LABELS={pending:'Registrado',sent:'Enviado',visited:'Visitó producto',notified:'Estado anterior: notificado'};
+async function sendWaitlistEmail(entry,button){
+  if(!confirm(`¿Enviar notificación a ${entry.email} sobre ${entry.productName}?`))return;
+  button.disabled=true;button.textContent='Enviando…';
+  const msg=document.getElementById('waitlistMessage');
+  try{
+    const user=auth?.currentUser;if(!user)throw Error('Inicia sesión nuevamente.');
+    const jwt=await user.getIdToken();
+    const res=await fetch(WAITLIST_SEND_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+jwt},body:JSON.stringify({id:entry.id})});
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok||!data.ok)throw Error(data.error||'El servidor rechazó la solicitud.');
+    await loadWaitlist();
+    document.getElementById('waitlistMessage').textContent='Brevo aceptó el envío a '+entry.email+'.';
+  }catch(error){msg.textContent='Error: '+error.message;button.disabled=false;button.textContent=entry.status==='pending'?'Enviar email':'Volver a enviar';}
+}
 async function loadWaitlist(){
   const tbody=document.getElementById('waitlistRows'),msg=document.getElementById('waitlistMessage');if(!db||!auth?.currentUser)return;
   msg.textContent='Cargando…';
-  try {const snap=await getDocs(collection(db,'productWaitlist'));const filter=(document.getElementById('waitlistSearch').value||'').toLowerCase();tbody.replaceChildren();
+  try{
+    const snap=await getDocs(collection(db,'productWaitlist'));
+    const filter=(document.getElementById('waitlistSearch').value||'').toLowerCase();tbody.replaceChildren();
     const entries=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0)).filter(v=>[v.sku,v.productName,v.email].join(' ').toLowerCase().includes(filter));
-    for(const v of entries){const tr=document.createElement('tr');for(const field of ['sku','productName','email','status']){const td=document.createElement('td');td.textContent=String(v[field]||'—');tr.append(td)}const td=document.createElement('td'),btn=document.createElement('button');btn.className='secondary-button compact';btn.textContent=v.status==='notified'?'Marcar pendiente':'Marcar notificado';btn.onclick=async()=>{await updateDoc(doc(db,'productWaitlist',v.id),{status:v.status==='notified'?'pending':'notified'});loadWaitlist()};td.append(btn);tr.append(td);tbody.append(tr)}msg.textContent=entries.length+' solicitudes';
-  }catch(e){msg.textContent='Error al cargar solicitudes: '+e.message}
+    for(const entry of entries){
+      const tr=document.createElement('tr');
+      for(const field of ['sku','productName','email','status']){
+        const td=document.createElement('td');td.textContent=field==='status'?(WAITLIST_STATUS_LABELS[entry.status]||entry.status||'—'):String(entry[field]||'—');tr.append(td);
+      }
+      const td=document.createElement('td'),btn=document.createElement('button');btn.className='secondary-button compact';
+      btn.type='button';btn.textContent=entry.status==='pending'?'Enviar email':'Volver a enviar';
+      btn.addEventListener('click',()=>sendWaitlistEmail(entry,btn));td.append(btn);tr.append(td);tbody.append(tr);
+    }
+    msg.textContent=entries.length+' solicitudes';
+  }catch(e){msg.textContent='Error al cargar solicitudes: '+e.message;}
 }
 document.getElementById('refreshWaitlist')?.addEventListener('click',loadWaitlist);
 document.getElementById('waitlistSearch')?.addEventListener('input',loadWaitlist);
