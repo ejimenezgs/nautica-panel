@@ -357,10 +357,16 @@ async function saveCatalogSettings() {
     catalogSettingsMessage.classList.add("error");
     return;
   }
+  if (!siteModesReady) {
+    catalogSettingsMessage.textContent = "Los modos aún no se cargaron desde Firebase. Recarga la página e inténtalo de nuevo.";
+    catalogSettingsMessage.classList.add("error");
+    return;
+  }
   saveCatalogSettingsButton.disabled = true;
   catalogSettingsMessage.classList.remove("error");
   catalogSettingsMessage.textContent = "Guardando…";
   try {
+    await saveSiteModes();
     await setDoc(doc(db, CATALOG_SETTINGS_COLLECTION, CATALOG_SETTINGS_DOC), {
       apiUrl: parsed.href,
       updatedAt: serverTimestamp(),
@@ -368,9 +374,8 @@ async function saveCatalogSettings() {
     }, { merge: true });
     catalogApiUrl = parsed.href;
     catalogApiUrlInput.value = catalogApiUrl;
-    await saveSiteModes();
     productsLoaded = false;
-    catalogSettingsMessage.textContent = "Endpoint guardado. La próxima actualización usará esta URL.";
+    catalogSettingsMessage.textContent = "Configuración guardada: modos y endpoint actualizados.";
   } catch (error) {
     console.error(error);
     catalogSettingsMessage.textContent = error?.message || "No fue posible guardar la configuración.";
@@ -1740,28 +1745,41 @@ function escapeAttr(value) {
 
 // Oaxsun Technologies — website modes and product waitlist
 const modeDoc = () => doc(db, 'siteSettings', 'public');
-function syncModeSwitches(){
- const commerce=document.getElementById('commerceMode').value;
- const site=document.getElementById('siteMode').value;
- document.getElementById('commerceModeSwitch').checked=commerce==='catalog';
- document.getElementById('siteModeSwitch').checked=site==='maintenance';
+let siteModesReady = false;
+function syncModeDescriptions(){
+ const commerce=document.getElementById('commerceMode')?.value;
+ const site=document.getElementById('siteMode')?.value;
  document.getElementById('commerceModeDescription').textContent=commerce==='catalog'?'Catálogo: sin compras, con lista de espera.':'Tienda: compras y Stripe habilitados.';
- document.getElementById('siteModeDescription').textContent=site==='maintenance'?'Mantenimiento: intro y newsletter.':'Live: el público puede ingresar.';
+ document.getElementById('siteModeDescription').textContent=site==='maintenance'?'Mantenimiento: intro y newsletter; acceso público restringido.':'Live: el público puede ingresar.';
 }
-for(const [id,target,on,off] of [['commerceModeSwitch','commerceMode','catalog','store'],['siteModeSwitch','siteMode','maintenance','live']]){
- document.getElementById(id)?.addEventListener('change',e=>{document.getElementById(target).value=e.target.checked?on:off;syncModeSwitches();});
-}
+for(const id of ['commerceMode','siteMode']) document.getElementById(id)?.addEventListener('change',syncModeDescriptions);
 async function loadSiteModes(){
- try{const snap=await getDoc(modeDoc());const v=snap.data()||{};
- document.getElementById('commerceMode').value=v.commerceMode==='catalog'?'catalog':'store';
- document.getElementById('siteMode').value=v.siteMode==='maintenance'?'maintenance':'live';
- syncModeSwitches();
- }catch(e){document.getElementById('siteModesMessage').textContent='No se pudo consultar la configuración.';}
+ const msg=document.getElementById('siteModesMessage');
+ siteModesReady=false;
+ try{
+   const snap=await getDoc(modeDoc());
+   const v=snap.exists()?snap.data():{commerceMode:'store',siteMode:'live'};
+   if(!['store','catalog'].includes(v.commerceMode)||!['live','maintenance'].includes(v.siteMode)) throw new Error('Valores de modos no válidos en Firestore.');
+   document.getElementById('commerceMode').value=v.commerceMode;
+   document.getElementById('siteMode').value=v.siteMode;
+   syncModeDescriptions();
+   siteModesReady=true;
+   msg.textContent='';
+ }catch(e){msg.textContent='No se pudieron cargar los modos. Recarga el panel antes de guardar. '+(e?.message||'');}
 }
 async function saveSiteModes(){
- const msg=document.getElementById('siteModesMessage');msg.textContent='Guardando modos…';
- try{await setDoc(modeDoc(),{commerceMode:document.getElementById('commerceMode').value,siteMode:document.getElementById('siteMode').value,updatedAt:serverTimestamp()},{merge:true});msg.textContent='Modos guardados.';}
- catch(e){msg.textContent='Error al guardar modos: '+e.message;throw e;}
+ const msg=document.getElementById('siteModesMessage');
+ if(!siteModesReady) throw new Error('No se pudieron cargar los modos desde Firebase; se canceló el guardado para evitar sobrescribirlos.');
+ const commerceMode=document.getElementById('commerceMode').value;
+ const siteMode=document.getElementById('siteMode').value;
+ if(!['store','catalog'].includes(commerceMode)||!['live','maintenance'].includes(siteMode)) throw new Error('Selecciona modos válidos.');
+ msg.textContent='Guardando modos…';
+ try{
+   await setDoc(modeDoc(),{commerceMode,siteMode,updatedAt:serverTimestamp()},{merge:true});
+   const snap=await getDoc(modeDoc());
+   if(!snap.exists()||snap.data().commerceMode!==commerceMode||snap.data().siteMode!==siteMode) throw new Error('Firebase no confirmó los modos seleccionados.');
+   msg.textContent='Modos guardados correctamente.';
+ }catch(e){msg.textContent='Error al guardar modos: '+e.message;throw e;}
 }
 async function loadWaitlist(){
   const tbody=document.getElementById('waitlistRows'),msg=document.getElementById('waitlistMessage');if(!db||!auth?.currentUser)return;

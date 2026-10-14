@@ -1,0 +1,1 @@
+Nautica Panel v7: selectores explícitos Tienda/Catálogo y Live/Mantenimiento. Guardar configuración valida, guarda y verifica los modos en Firestore, y después guarda el endpoint. Si falla la carga de modos, no sobrescribe el estado remoto.

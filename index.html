@@ -142,11 +142,11 @@
         <section class="panel-view-content is-hidden" data-panel-view="settings">
           <section class="table-card settings-card">
             <div class="table-toolbar">
-              <div><h2>Configuración</h2><p>Conexión del catálogo externo utilizado por la pestaña Productos.</p></div>
+              <div><h2>Configuración</h2><p>Administra el estado del sitio, el modo comercial y la conexión del catálogo.</p></div>
             </div>
             <div class="settings-form"><div class="settings-note"><strong>Estado de Nautica Home</strong><p>Selecciona los modos y pulsa Guardar configuración al final.</p></div>
-<div class="mode-settings-group"><div class="mode-setting"><div><strong>Modo comercial</strong><p id="commerceModeDescription">Tienda: compras y Stripe habilitados.</p></div><label class="mode-switch"><input type="checkbox" id="commerceModeSwitch" aria-label="Activar modo catálogo"><span class="mode-switch-track"></span></label><input type="hidden" id="commerceMode" value="store"></div>
-<div class="mode-setting"><div><strong>Estado del sitio</strong><p id="siteModeDescription">Live: el público puede ingresar.</p></div><label class="mode-switch"><input type="checkbox" id="siteModeSwitch" aria-label="Activar mantenimiento"><span class="mode-switch-track"></span></label><input type="hidden" id="siteMode" value="live"></div></div>
+<div class="mode-settings-group"><div class="mode-setting"><div><strong>Modo comercial</strong><p id="commerceModeDescription">Tienda: compras y Stripe habilitados.</p></div><select id="commerceMode" class="mode-select" aria-label="Modo comercial"><option value="store">Tienda</option><option value="catalog">Catálogo</option></select></div>
+<div class="mode-setting"><div><strong>Estado del sitio</strong><p id="siteModeDescription">Live: el público puede ingresar.</p></div><select id="siteMode" class="mode-select" aria-label="Estado del sitio"><option value="live">Live</option><option value="maintenance">Mantenimiento</option></select></div></div>
 <p id="siteModesMessage" class="form-message" aria-live="polite"></p>
 <label class="settings-field" for="catalogApiUrl"><span>Endpoint del catálogo</span><input id="catalogApiUrl" type="url" value="https://segel-erp.vercel.app/api/catalogo" autocomplete="off" spellcheck="false" /></label>
               <div class="settings-note"><strong>Fuente de inventario</strong><p>SKU, precio y stock se consultan directamente desde este endpoint. Los overrides editoriales permanecen en Firebase y no sustituyen el inventario.</p></div>
