@@ -1,0 +1,19 @@
+<?php
+declare(strict_types=1);
+function wl_escape(string $value): string {return htmlspecialchars($value,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');}
+function wl_email_html(string $name,string $sku,string $productUrl,string $preferencesUrl,string $imageUrl=''): string {
+    $name=wl_escape($name);$sku=wl_escape($sku);$productUrl=wl_escape($productUrl);$preferencesUrl=wl_escape($preferencesUrl);$imageUrl=wl_escape($imageUrl);
+    $image=$imageUrl!==''?'<tr><td align="center" style="padding:0 36px"><a href="'.$productUrl.'"><img src="'.$imageUrl.'" alt="'.$name.'" width="508" border="0" style="display:block;width:100%;max-width:508px;height:auto;background:#f3f2ef"></a></td></tr>':'';
+    return '<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Nautica Home</title></head>
+<body style="margin:0;padding:0;background:#f4f5f5;font-family:Avenir,\'Avenir Next\',Arial,Helvetica,sans-serif;color:#0d2943">
+<div style="display:none;max-height:0;overflow:hidden;mso-hide:all">Descubre los detalles de tu selección en Nautica Home.</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f4f5f5"><tr><td align="center" style="padding:24px 12px">
+<table role="presentation" width="580" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:580px;background:#fff;font-family:Avenir,\'Avenir Next\',Arial,Helvetica,sans-serif">
+<tr><td align="center" style="padding:34px 24px 28px;border-bottom:1px solid #e7ebed"><img src="https://www.nauticahome.com.mx/assets/email/nautica-home-logo.png" width="205" alt="Nautica Home" style="display:block;width:205px;max-width:100%;height:auto" border="0"></td></tr>
+<tr><td align="center" style="padding:32px 28px 25px"><p style="font-size:11px;letter-spacing:2.4px;color:#68798b;margin:0 0 14px">TU LISTA DE ESPERA</p><h1 style="font-family:Avenir,\'Avenir Next\',Arial,Helvetica,sans-serif;font-size:28px;line-height:1.3;font-weight:400;letter-spacing:.3px;margin:0 0 17px;color:#0d2943">LO TENÍAS EN MENTE.<br>AHORA, DESCÚBRELO.</h1><p style="font-size:14px;line-height:1.75;color:#5f6c77;margin:0">Nos pediste que te avisáramos.<br>Ya puedes consultar el producto que te interesa<br>y conocer todos sus detalles.</p></td></tr>
+'.$image.'
+<tr><td align="center" style="padding:23px 28px 30px"><p style="font-size:11px;letter-spacing:2px;color:#68798b;margin:0 0 10px">NAUTICA HOME · MÉXICO</p><h2 style="font-family:Avenir,\'Avenir Next\',Arial,Helvetica,sans-serif;font-size:20px;line-height:1.3;font-weight:400;margin:0 0 8px">'.$name.'</h2><p style="font-size:11px;color:#71808c;margin:0 0 22px">Referencia: '.$sku.'</p><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td align="center" bgcolor="#0d2943" style="background:#0d2943"><a href="'.$productUrl.'" style="display:inline-block;padding:17px 38px;border:1px solid #0d2943;background:#0d2943;color:#fff;text-decoration:none;font-size:12px;letter-spacing:1.8px;font-family:Avenir,\'Avenir Next\',Arial,Helvetica,sans-serif">VER PRODUCTO</a></td></tr></table><p style="font-size:12px;line-height:1.7;color:#71808c;margin:19px 0 0">#NoPlaceLikeHOME</p></td></tr>
+<tr><td align="center" style="padding:25px 28px 27px;background:#f5f6f6;border-top:1px solid #e8ebed"><p style="font-size:11px;line-height:1.75;color:#6b7883;margin:0 0 12px">Recibes este correo porque solicitaste un aviso<br>sobre este producto en Nautica Home México.</p><a href="'.$preferencesUrl.'" style="color:#294b68;text-decoration:underline;font-size:12px">Administrar avisos o darme de baja</a><p style="letter-spacing:2px;font-size:11px;color:#0d2943;margin:20px 0 12px">NAUTICA HOME MÉXICO</p><a href="https://www.nauticahome.com.mx/privacy-notice.html" style="color:#6b7883;text-decoration:none;font-size:11px">Aviso de privacidad</a></td></tr>
+</table></td></tr></table></body></html>';
+}

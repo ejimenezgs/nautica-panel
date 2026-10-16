@@ -1,0 +1,23 @@
+{
+  ".cpanel.yml": "edec56689e1d0e3d288efec9689bcf9a25e884b45ecda79594de8e2729cfb3f9",
+  ".htaccess": "ec0060a6a186e4b30d2d3f5caf83f9da741d7fc3a430087d69ed5401ef0d2a77",
+  "CAMBIOS-V10.2.md": "1715d8245a76b94a6411560550a79b918e3f44011eb2d1644d6235bbd3ce97dc",
+  "CAMBIOS-V7.md": "a628122ede0323002af83a69f28b962b0779f33321224bb45c2407776d220485",
+  "CORRECCION-V9.md": "b5d6922b24b75150cc546869f4e07dcc875eae98db76f4654aa773b0e16d7f02",
+  "INSTALACION-V10.2.md": "de2d6469e19925f8011583c823fb373a2def1ac3303e2fc6c59c052b04530013",
+  "README.md": "871eafe57134298ad2fc64fc72d4e735facf1f3f9dcfe7cd577c28e72004fd28",
+  "VALIDACION-V10.1.md": "95b18158cf94bc20c87f91b5e22632564fbb074626fae6fc46ac77fd7c87bcf5",
+  "api/_asset-common.php": "e31789d4a679c15154f3681173d49b502b409ebafe350502afb66a23201a7e26",
+  "api/asset-health.php": "42d2b0b032dbc4909d76becbafc5d10bb5a8a107edc98e1bbe8fbb5113fb0cfc",
+  "api/delete-website-asset.php": "32f87d1bf0884edb1ddf970dbf7fe5a94aa0a7811c72a776aa47a903f4151295",
+  "api/upload-website-asset.php": "8dd5d6632edd6add45f24ecc34f22c7f2831e507b761649b68b5fd1c23478d5a",
+  "css/styles.css": "2cdec3dff99a4568ce06e55df7921446b2a46a23f9b2183244922b1b00c35867",
+  "firestore.rules": "9507cd53173f3455cdeae898da92659faadf6044949999b260f734c02f3367a3",
+  "index.html": "6a2f4c6bb6c1eccb8cfd012a18f1d55f2376ced2c5292c78c119478f65077ba4",
+  "js/app.js": "c9ea2e0d409fe5b0b7b7ca9a32ce0dbbb656dcf9b5309636a34e6b959ec56229",
+  "js/firebase-config.js": "76fa394cc2668e7c0e29c8ff37cb9fee3ec32661d7a7746f770cf563b3c493a8",
+  "js/inventory-api.js": "88e8709720563fcfb9bb3edc4ffbd363657a7892968c1bf622cca9ad6c8c37f5",
+  "js/product-classification.js": "06704c896e46e8b34427bace8aa42b68d228a0cdbc68456adaa259c5d2c3ab2e",
+  "storage.rules": "18b96937f9ae7038737850746c51f58ecaa22a32b9e3f1518dde7584ac0468c1",
+  "tests/waitlist.test.cjs": "43c23119d0f8ec2cbd8b686dab4123f45e3b58df28342f042cd30ee5a0782653"
+}

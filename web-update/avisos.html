@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <title>Tus avisos | Nautica Home México</title>
+  <link rel="stylesheet" href="./css/waitlist-preferences.css?v=42">
+  <script src="./js/waitlist-preferences.js?v=42" defer></script>
+</head>
+<body>
+  <main class="preferences">
+    <header><img src="./assets/email/nautica-home-logo.png" alt="Nautica Home" width="205"></header>
+    <section id="preferencesView">
+      <p class="eyebrow">TUS PREFERENCIAS</p>
+      <h1>Tú eliges qué recibir.</h1>
+      <p class="copy">Selecciona los avisos de Lista de espera que quieres dejar de recibir.</p>
+      <p id="accountHint" class="small"></p>
+      <p id="loadMessage" class="copy" role="status" aria-live="polite">Cargando tus avisos…</p>
+      <button id="retryLoad" class="text-link" type="button" hidden>Volver a cargar</button>
+      <form id="preferencesForm" hidden>
+        <label class="choice"><input id="unsubscribeAll" type="checkbox"><span>Dar de baja todos mis avisos<small>Incluye todos tus productos y futuros avisos de Lista de espera para este correo.</small></span></label>
+        <div id="productChoices"></div>
+        <p class="small">La baja no modifica tu suscripción a Newsletter.</p>
+        <div class="actions"><button id="confirmUnsubscribe" class="primary" type="submit" disabled>CONFIRMAR BAJA</button><a class="text-link" href="./productos.html">Conservar mis avisos</a></div>
+        <p id="submitMessage" class="copy" role="status" aria-live="polite"></p>
+      </form>
+    </section>
+    <section id="confirmationView" hidden>
+      <p class="eyebrow">PREFERENCIAS ACTUALIZADAS</p>
+      <h1>Todo listo.</h1>
+      <p id="confirmationMessage" class="copy" role="status" aria-live="polite"></p>
+      <p class="small">Tu suscripción a Newsletter se mantiene independiente.</p>
+      <a class="primary" href="./productos.html">VOLVER A NAUTICA HOME</a>
+    </section>
+    <footer><p>#NoPlaceLikeHOME</p><a href="./privacy-notice.html">Aviso de privacidad</a></footer>
+  </main>
+</body>
+</html>

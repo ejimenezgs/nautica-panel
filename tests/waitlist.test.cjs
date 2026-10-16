@@ -18,7 +18,7 @@ class Element {
 function harness(options = {}) {
   const elements = Object.fromEntries(['waitlistRows', 'waitlistMessage', 'waitlistSendMessage', 'waitlistSearch', 'refreshWaitlist'].map(id => [id, new Element()]));
   const nav = new Element();
-  const calls = { reads: 0, posts: [], tokens: 0, confirms: 0 };
+  const calls = { preferenceReads: 0, reads: 0, posts: [], tokens: 0, confirms: 0 };
   const user = { uid, getIdToken: async () => { calls.tokens++; return 'mock-id-token'; } };
   const context = vm.createContext({
     document: { getElementById: id => elements[id], querySelector: () => nav, createElement: () => new Element() },
@@ -26,8 +26,8 @@ function harness(options = {}) {
     auth: { currentUser: user }, db: {}, TypeError,
     console: { warn() {} },
     confirm: () => { calls.confirms++; return options.confirm !== false; },
-    collection: (_db, name) => { assert.equal(name, 'productWaitlist'); return name; },
-    getDocs: async () => { calls.reads++; return options.read ? options.read(calls.reads) : snapshot(options.entries || [entry('one')]); },
+    collection: (_db, name) => { assert.ok(['productWaitlist','waitlistEmailPreferences'].includes(name)); return name; },
+    getDocs: async ref => { if (ref === 'waitlistEmailPreferences') { calls.preferenceReads++; if(options.preferenceRead) return options.preferenceRead(); return snapshot(options.preferences || []); } calls.reads++; return options.read ? options.read(calls.reads) : snapshot(options.entries || [entry('one')]); },
     fetch: async (url, request) => { calls.posts.push({ url, request }); return options.send ? options.send() : { ok: true, json: async () => ({ ok: true }) }; }
   });
   vm.runInContext(source.slice(source.indexOf('const WAITLIST_SEND_URL')) + '\nglobalThis.api = {loadWaitlist, renderWaitlist, sendWaitlistEmail, resetWaitlistState};', context);
@@ -183,5 +183,32 @@ test('HTTPS redirect and cPanel deployment include .htaccess; frontend cache is 
   assert.match(fs.readFileSync(path.join(root, '.htaccess'), 'utf8'), /RewriteCond %\{HTTPS\} !=on\nRewriteRule \^ https:\/\/panel.nauticahome.com.mx%\{REQUEST_URI\} \[R=301,L\]/);
   assert.match(fs.readFileSync(path.join(root, '.cpanel.yml'), 'utf8'), /cp \.htaccess "\$DEPLOYPATH\/\.htaccess"/);
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-  assert.match(html, /app.js\?v=10\.1/); assert.match(html, /id="waitlistSendMessage"/);
+  assert.match(html, /app.js\?v=10\.2/); assert.match(html, /id="waitlistSendMessage"/);
+});
+
+
+test('specific product opt-out disables its action and retains other products', async () => {
+  const h = harness({entries:[entry('one'),entry('two')],preferences:[{id:'pref',email:'one@example.test',all:false,skus:['ONE']}]});
+  await h.loadWaitlist();
+  assert.equal(h.rows()[0].children[3].textContent,'Baja de usuario');
+  assert.equal(h.button(0).disabled,true);
+  assert.equal(h.button(1).disabled,false);
+  await h.button(0).dispatch('click'); assert.equal(h.calls.posts.length,0);
+});
+test('global opt-out applies even to a new pending record', async () => {
+  const h = harness({preferences:[{id:'pref',email:'one@example.test',all:true,skus:[]}]});
+  await h.loadWaitlist(); assert.equal(h.button().disabled,true);
+  assert.equal(h.rows()[0].children[3].textContent,'Baja de usuario');
+});
+test('preference lookup failure retains rows but fails closed for sending', async () => {
+  const h = harness({preferenceRead:()=>{throw new Error('denied');}});
+  assert.equal(await h.loadWaitlist(),true);assert.equal(h.rows().length,1);
+  assert.equal(h.button().disabled,true);assert.match(h.elements.waitlistMessage.textContent,/verificar las bajas/);
+  await h.button().dispatch('click');assert.equal(h.calls.posts.length,0);
+});
+test('backend opt-out response updates the visible status without retrying', async () => {
+ const h=harness({send:()=>({ok:false,json:async()=>({error:'Baja de usuario',status:'unsubscribed'})})});
+ await h.loadWaitlist();await h.button().dispatch('click');
+ assert.equal(h.calls.posts.length,1);assert.equal(h.button().disabled,true);
+ assert.equal(h.rows()[0].children[3].textContent,'Baja de usuario');
 });

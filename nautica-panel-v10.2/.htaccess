@@ -1,0 +1,4 @@
+# Nautica Panel: Brevo only accepts the secure panel origin.
+RewriteEngine On
+RewriteCond %{HTTPS} !=on
+RewriteRule ^ https://panel.nauticahome.com.mx%{REQUEST_URI} [R=301,L]

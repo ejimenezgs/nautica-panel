@@ -1,0 +1,34 @@
+// Fragmento: añadir DENTRO de match /databases/{database}/documents.
+// NO reemplazar las reglas completas con este archivo.
+function isNauticaWaitlistBackend() {
+  return request.auth != null
+    && request.auth.token.email == 'backend@nauticahome.com.mx'
+    && request.auth.token.firebase.sign_in_provider == 'password';
+}
+function isNauticaWaitlistAdmin() {
+  return request.auth != null
+    && request.auth.uid == '5vwUKOwvdfQsmnLRhoJCEs9Rqyg1';
+}
+match /waitlistEmailPreferences/{emailHash} {
+  allow get, list: if isNauticaWaitlistBackend() || isNauticaWaitlistAdmin();
+  allow create, update: if isNauticaWaitlistBackend()
+    && emailHash.matches('^[a-f0-9]{64}$')
+    && request.resource.data.keys().hasOnly(['email','all','skus','updatedAt'])
+    && request.resource.data.keys().hasAll(['email','all','skus','updatedAt'])
+    && request.resource.data.email is string
+    && request.resource.data.email.size() <= 254
+    && request.resource.data.all is bool
+    && request.resource.data.skus is list
+    && request.resource.data.skus.size() <= 5000
+    && request.resource.data.updatedAt is timestamp;
+  allow delete: if false;
+}
+// Este match adicional permite únicamente al backend consultar los avisos
+// y escribir la baja. Conserva todos los match y permisos previos.
+match /productWaitlist/{waitlistId} {
+  allow get, list: if isNauticaWaitlistBackend();
+  allow update: if isNauticaWaitlistBackend()
+    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','unsubscribedAt'])
+    && request.resource.data.status == 'unsubscribed'
+    && request.resource.data.unsubscribedAt is timestamp;
+}

@@ -1780,11 +1780,14 @@ async function saveSiteModes(){
 }
 const WAITLIST_SEND_URL = 'https://www.nauticahome.com.mx/api/brevo/send-waitlist.php';
 const WAITLIST_ADMIN_UID = '5vwUKOwvdfQsmnLRhoJCEs9Rqyg1';
-const WAITLIST_STATUS_LABELS = { pending: 'Registrado', sent: 'Enviado', visited: 'Visitó producto', notified: 'Estado anterior: notificado' };
+const WAITLIST_STATUS_LABELS = { pending: 'Registrado', sent: 'Enviado', visited: 'Visitó producto', unsubscribed: 'Baja de usuario', notified: 'Estado anterior: notificado' };
 let waitlistEntries = [];
 let waitlistRequestId = 0;
 let waitlistSessionId = 0;
 let waitlistLoadError = '';
+let waitlistPreferences = new Map();
+let waitlistPreferencesReady = false;
+let waitlistPreferenceError = '';
 const waitlistSending = new Set();
 
 function resetWaitlistState() {
@@ -1792,6 +1795,9 @@ function resetWaitlistState() {
   waitlistSessionId++;
   waitlistEntries = [];
   waitlistLoadError = '';
+  waitlistPreferences.clear();
+  waitlistPreferencesReady = false;
+  waitlistPreferenceError = '';
   waitlistSending.clear();
   document.getElementById('waitlistRows')?.replaceChildren();
   for (const id of ['waitlistMessage', 'waitlistSendMessage']) {
@@ -1810,6 +1816,12 @@ function waitlistAdmin() {
   return user;
 }
 
+function waitlistStatus(entry) {
+  const pref = waitlistPreferences.get(String(entry.email || '').trim().toLowerCase());
+  const sku = String(entry.sku || '').trim().toUpperCase();
+  return entry.status === 'unsubscribed' || pref?.all === true || (Array.isArray(pref?.skus) && pref.skus.includes(sku)) ? 'unsubscribed' : entry.status;
+}
+
 function renderWaitlist() {
   const tbody = document.getElementById('waitlistRows');
   const msg = document.getElementById('waitlistMessage');
@@ -1823,17 +1835,18 @@ function renderWaitlist() {
   const entries = waitlistEntries.filter(entry => [entry.sku, entry.productName, entry.email].join(' ').toLowerCase().includes(filter));
   const rows = entries.map(entry => {
     const tr = document.createElement('tr');
+    const status = waitlistStatus(entry);
     for (const field of ['sku', 'productName', 'email', 'status']) {
       const td = document.createElement('td');
-      td.textContent = field === 'status' ? (WAITLIST_STATUS_LABELS[entry.status] || entry.status || '—') : String(entry[field] || '—');
+      td.textContent = field === 'status' ? (WAITLIST_STATUS_LABELS[status] || status || '—') : String(entry[field] || '—');
       tr.append(td);
     }
     const td = document.createElement('td');
     const btn = document.createElement('button');
     btn.className = 'secondary-button compact';
     btn.type = 'button';
-    btn.disabled = waitlistSending.has(entry.id);
-    btn.textContent = btn.disabled ? 'Enviando…' : (entry.status === 'pending' ? 'Enviar email' : 'Volver a enviar');
+    btn.disabled = status === 'unsubscribed' || !waitlistPreferencesReady || waitlistSending.has(entry.id);
+    btn.textContent = status === 'unsubscribed' ? 'Baja de usuario' : waitlistSending.has(entry.id) ? 'Enviando…' : (status === 'pending' ? 'Enviar email' : 'Volver a enviar');
     btn.addEventListener('click', () => sendWaitlistEmail(entry, btn));
     td.append(btn);
     tr.append(td);
@@ -1843,6 +1856,7 @@ function renderWaitlist() {
   tbody.replaceChildren(...rows);
   const count = entries.length + ' solicitudes';
   msg.textContent = waitlistLoadError ? waitlistLoadError + ' Se conservan los últimos datos cargados. ' + count : count;
+  if (waitlistPreferenceError) msg.textContent += ' ' + waitlistPreferenceError;
 }
 
 async function loadWaitlist() {
@@ -1852,12 +1866,30 @@ async function loadWaitlist() {
   try {
     const user = waitlistAdmin();
     if (!db) throw new Error('Firebase no está disponible.');
+    waitlistPreferencesReady = false;
+    renderWaitlist();
     msg.textContent = 'Cargando…';
     const snap = await getDocs(collection(db, 'productWaitlist'));
     if (requestId !== waitlistRequestId || sessionId !== waitlistSessionId || auth?.currentUser !== user) return false;
     waitlistEntries = snap.docs.map(item => ({ ...item.data(), id: item.id }))
       .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
     waitlistLoadError = '';
+    waitlistPreferenceError = '';
+    renderWaitlist();
+    try {
+      const preferences = await getDocs(collection(db, 'waitlistEmailPreferences'));
+      if (requestId !== waitlistRequestId || sessionId !== waitlistSessionId || auth?.currentUser !== user) return false;
+      waitlistPreferences = new Map(preferences.docs.map(item => {
+        const data = item.data();
+        return [String(data.email || '').trim().toLowerCase(), data];
+      }));
+      waitlistPreferencesReady = true;
+    } catch (error) {
+      if (requestId !== waitlistRequestId || sessionId !== waitlistSessionId || auth?.currentUser !== user) return false;
+      waitlistPreferencesReady = false;
+      waitlistPreferenceError = 'No se pudieron verificar las bajas. Puedes consultar los registros; los envíos permanecen bloqueados hasta Actualizar.';
+      console.warn('No se pudieron leer las preferencias de Lista de espera', error);
+    }
     renderWaitlist();
     return true;
   } catch (error) {
@@ -1878,6 +1910,8 @@ async function sendWaitlistEmail(entry, button) {
   let accepted = false;
   try {
     const user = waitlistAdmin();
+    if (waitlistStatus(entry) === 'unsubscribed') throw new Error('Baja de usuario: este aviso no puede enviarse.');
+    if (!waitlistPreferencesReady) throw new Error('Actualiza la lista para verificar las bajas antes de enviar.');
     if (window.location.origin !== 'https://panel.nauticahome.com.mx') {
       throw new Error('Abre https://panel.nauticahome.com.mx e inicia sesión allí para enviar correos.');
     }
@@ -1896,6 +1930,9 @@ async function sendWaitlistEmail(entry, button) {
     });
     const data = await res.json().catch(() => ({}));
     if (sessionId !== waitlistSessionId || auth?.currentUser !== user) return;
+    if (data.status === 'unsubscribed') {
+      waitlistEntries = waitlistEntries.map(item => item.id === entry.id ? { ...item, status: 'unsubscribed' } : item);
+    }
     if (!res.ok || !data.ok) throw new Error(data.error || 'El servidor no confirmó el envío.');
     accepted = true;
     const refreshed = await loadWaitlist();
