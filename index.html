@@ -138,7 +138,7 @@
           </section>
         </section>
 
-        <section class="panel-view-content is-hidden" data-panel-view="waitlist"><section class="table-card settings-card"><div class="table-toolbar"><div><h2>Lista de espera</h2><p>Solicitudes de notificación por producto.</p></div><button id="refreshWaitlist" class="secondary-button" type="button">Actualizar</button></div><div class="settings-form"><input id="waitlistSearch" placeholder="Buscar SKU, producto o correo" aria-label="Buscar en lista de espera"><p id="waitlistMessage" class="form-message"></p><div class="table-wrap"><table class="products-table"><thead><tr><th>SKU</th><th>Producto</th><th>Correo</th><th>Estado</th><th>Acción</th></tr></thead><tbody id="waitlistRows"></tbody></table></div></div></section></section>
+        <section class="panel-view-content is-hidden" data-panel-view="waitlist"><section class="table-card settings-card"><div class="table-toolbar"><div><h2>Lista de espera</h2><p>Solicitudes de notificación por producto.</p></div><button id="refreshWaitlist" class="secondary-button" type="button">Actualizar</button></div><div class="settings-form"><input id="waitlistSearch" placeholder="Buscar SKU, producto o correo" aria-label="Buscar en lista de espera"><p id="waitlistMessage" class="form-message" role="status"></p><p id="waitlistSendMessage" class="form-message" role="status" hidden></p><div class="table-wrap"><table class="products-table"><thead><tr><th>SKU</th><th>Producto</th><th>Correo</th><th>Estado</th><th>Acción</th></tr></thead><tbody id="waitlistRows"></tbody></table></div></div></section></section>
         <section class="panel-view-content is-hidden" data-panel-view="settings">
           <section class="table-card settings-card">
             <div class="table-toolbar">
@@ -240,6 +240,6 @@
     </aside>
   </div>
 
-  <script type="module" src="./js/app.js?v=9"></script>
+  <script type="module" src="./js/app.js?v=10.1"></script>
 </body>
 </html>

@@ -271,6 +271,7 @@ if (isConfigured) {
       startMessagesListener();
     } else {
       stopMessagesListener();
+      resetWaitlistState();
       panelView.classList.add("is-hidden");
       authView.classList.remove("is-hidden");
       userEmail.textContent = "—";
@@ -1777,41 +1778,148 @@ async function saveSiteModes(){
    msg.textContent='Modos guardados correctamente.';
  }catch(e){msg.textContent='Error al guardar modos: '+e.message;throw e;}
 }
-const WAITLIST_SEND_URL='https://nauticahome.com.mx/api/brevo/send-waitlist.php';
-const WAITLIST_STATUS_LABELS={pending:'Registrado',sent:'Enviado',visited:'Visitó producto',notified:'Estado anterior: notificado'};
-async function sendWaitlistEmail(entry,button){
-  if(!confirm(`¿Enviar notificación a ${entry.email} sobre ${entry.productName}?`))return;
-  button.disabled=true;button.textContent='Enviando…';
-  const msg=document.getElementById('waitlistMessage');
-  try{
-    const user=auth?.currentUser;if(!user)throw Error('Inicia sesión nuevamente.');
-    const jwt=await user.getIdToken();
-    const res=await fetch(WAITLIST_SEND_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+jwt},body:JSON.stringify({id:entry.id})});
-    const data=await res.json().catch(()=>({}));
-    if(!res.ok||!data.ok)throw Error(data.error||'El servidor rechazó la solicitud.');
-    await loadWaitlist();
-    document.getElementById('waitlistMessage').textContent='Brevo aceptó el envío a '+entry.email+'.';
-  }catch(error){msg.textContent='Error: '+error.message;button.disabled=false;button.textContent=entry.status==='pending'?'Enviar email':'Volver a enviar';}
-}
-async function loadWaitlist(){
-  const tbody=document.getElementById('waitlistRows'),msg=document.getElementById('waitlistMessage');if(!db||!auth?.currentUser)return;
-  msg.textContent='Cargando…';
-  try{
-    const snap=await getDocs(collection(db,'productWaitlist'));
-    const filter=(document.getElementById('waitlistSearch').value||'').toLowerCase();tbody.replaceChildren();
-    const entries=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0)).filter(v=>[v.sku,v.productName,v.email].join(' ').toLowerCase().includes(filter));
-    for(const entry of entries){
-      const tr=document.createElement('tr');
-      for(const field of ['sku','productName','email','status']){
-        const td=document.createElement('td');td.textContent=field==='status'?(WAITLIST_STATUS_LABELS[entry.status]||entry.status||'—'):String(entry[field]||'—');tr.append(td);
-      }
-      const td=document.createElement('td'),btn=document.createElement('button');btn.className='secondary-button compact';
-      btn.type='button';btn.textContent=entry.status==='pending'?'Enviar email':'Volver a enviar';
-      btn.addEventListener('click',()=>sendWaitlistEmail(entry,btn));td.append(btn);tr.append(td);tbody.append(tr);
+const WAITLIST_SEND_URL = 'https://www.nauticahome.com.mx/api/brevo/send-waitlist.php';
+const WAITLIST_ADMIN_UID = '5vwUKOwvdfQsmnLRhoJCEs9Rqyg1';
+const WAITLIST_STATUS_LABELS = { pending: 'Registrado', sent: 'Enviado', visited: 'Visitó producto', notified: 'Estado anterior: notificado' };
+let waitlistEntries = [];
+let waitlistRequestId = 0;
+let waitlistSessionId = 0;
+let waitlistLoadError = '';
+const waitlistSending = new Set();
+
+function resetWaitlistState() {
+  waitlistRequestId++;
+  waitlistSessionId++;
+  waitlistEntries = [];
+  waitlistLoadError = '';
+  waitlistSending.clear();
+  document.getElementById('waitlistRows')?.replaceChildren();
+  for (const id of ['waitlistMessage', 'waitlistSendMessage']) {
+    const message = document.getElementById(id);
+    if (message) {
+      message.textContent = '';
+      if (id === 'waitlistSendMessage') message.hidden = true;
     }
-    msg.textContent=entries.length+' solicitudes';
-  }catch(e){msg.textContent='Error al cargar solicitudes: '+e.message;}
+  }
 }
-document.getElementById('refreshWaitlist')?.addEventListener('click',loadWaitlist);
-document.getElementById('waitlistSearch')?.addEventListener('input',loadWaitlist);
-document.querySelector('[data-view="waitlist"]')?.addEventListener('click',loadWaitlist);
+
+function waitlistAdmin() {
+  const user = auth?.currentUser;
+  if (!user) throw new Error('Inicia sesión nuevamente.');
+  if (user.uid !== WAITLIST_ADMIN_UID) throw new Error('Esta función requiere el administrador autorizado.');
+  return user;
+}
+
+function renderWaitlist() {
+  const tbody = document.getElementById('waitlistRows');
+  const msg = document.getElementById('waitlistMessage');
+  if (!tbody || !msg) return;
+  if (auth?.currentUser?.uid !== WAITLIST_ADMIN_UID) {
+    tbody.replaceChildren();
+    msg.textContent = 'Inicia sesión con el administrador autorizado.';
+    return;
+  }
+  const filter = (document.getElementById('waitlistSearch')?.value || '').trim().toLowerCase();
+  const entries = waitlistEntries.filter(entry => [entry.sku, entry.productName, entry.email].join(' ').toLowerCase().includes(filter));
+  const rows = entries.map(entry => {
+    const tr = document.createElement('tr');
+    for (const field of ['sku', 'productName', 'email', 'status']) {
+      const td = document.createElement('td');
+      td.textContent = field === 'status' ? (WAITLIST_STATUS_LABELS[entry.status] || entry.status || '—') : String(entry[field] || '—');
+      tr.append(td);
+    }
+    const td = document.createElement('td');
+    const btn = document.createElement('button');
+    btn.className = 'secondary-button compact';
+    btn.type = 'button';
+    btn.disabled = waitlistSending.has(entry.id);
+    btn.textContent = btn.disabled ? 'Enviando…' : (entry.status === 'pending' ? 'Enviar email' : 'Volver a enviar');
+    btn.addEventListener('click', () => sendWaitlistEmail(entry, btn));
+    td.append(btn);
+    tr.append(td);
+    return tr;
+  });
+  // Build rows before replacing the table; a refresh failure retains the last successful result.
+  tbody.replaceChildren(...rows);
+  const count = entries.length + ' solicitudes';
+  msg.textContent = waitlistLoadError ? waitlistLoadError + ' Se conservan los últimos datos cargados. ' + count : count;
+}
+
+async function loadWaitlist() {
+  const msg = document.getElementById('waitlistMessage');
+  const requestId = ++waitlistRequestId;
+  const sessionId = waitlistSessionId;
+  try {
+    const user = waitlistAdmin();
+    if (!db) throw new Error('Firebase no está disponible.');
+    msg.textContent = 'Cargando…';
+    const snap = await getDocs(collection(db, 'productWaitlist'));
+    if (requestId !== waitlistRequestId || sessionId !== waitlistSessionId || auth?.currentUser !== user) return false;
+    waitlistEntries = snap.docs.map(item => ({ ...item.data(), id: item.id }))
+      .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+    waitlistLoadError = '';
+    renderWaitlist();
+    return true;
+  } catch (error) {
+    if (requestId !== waitlistRequestId || sessionId !== waitlistSessionId) return false;
+    waitlistLoadError = error?.code === 'permission-denied'
+      ? 'Firestore no autorizó la lectura de la lista de espera.'
+      : 'No se pudo actualizar la lista de espera. Comprueba la sesión y la conexión con Firebase.';
+    console.warn('No se pudo cargar productWaitlist', error);
+    renderWaitlist();
+    return false;
+  }
+}
+
+async function sendWaitlistEmail(entry, button) {
+  if (waitlistSending.has(entry.id)) return;
+  const msg = document.getElementById('waitlistSendMessage');
+  const sessionId = waitlistSessionId;
+  let accepted = false;
+  try {
+    const user = waitlistAdmin();
+    if (window.location.origin !== 'https://panel.nauticahome.com.mx') {
+      throw new Error('Abre https://panel.nauticahome.com.mx e inicia sesión allí para enviar correos.');
+    }
+    if (!confirm(`¿Enviar notificación a ${entry.email} sobre ${entry.productName}?`)) return;
+    waitlistSending.add(entry.id);
+    button.disabled = true;
+    button.textContent = 'Enviando…';
+    msg.hidden = false;
+    msg.textContent = 'Enviando solicitud…';
+    const jwt = await user.getIdToken();
+    if (sessionId !== waitlistSessionId || auth?.currentUser !== user) return;
+    const res = await fetch(WAITLIST_SEND_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + jwt },
+      body: JSON.stringify({ id: entry.id })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (sessionId !== waitlistSessionId || auth?.currentUser !== user) return;
+    if (!res.ok || !data.ok) throw new Error(data.error || 'El servidor no confirmó el envío.');
+    accepted = true;
+    const refreshed = await loadWaitlist();
+    if (sessionId !== waitlistSessionId || auth?.currentUser !== user) return;
+    msg.textContent = 'Brevo aceptó el envío a ' + entry.email + '.' + (refreshed ? '' : ' No se pudo actualizar la tabla; usa Actualizar antes de reenviar.');
+  } catch (error) {
+    if (sessionId !== waitlistSessionId) return;
+    console.warn('No se pudo confirmar el envío de Lista de espera', error);
+    msg.hidden = false;
+    msg.textContent = accepted
+      ? 'Brevo aceptó el envío, pero no se pudo actualizar la vista. No vuelvas a enviar sin revisar el estado.'
+      : error instanceof TypeError
+        ? 'No se pudo confirmar el envío: comprueba la conexión y el acceso HTTPS al backend. Revisa el estado antes de volver a enviar; no se reintentó automáticamente.'
+        : 'No se pudo confirmar el envío: ' + error.message;
+  } finally {
+    if (sessionId === waitlistSessionId && waitlistSending.delete(entry.id)) renderWaitlist();
+  }
+}
+
+document.getElementById('refreshWaitlist')?.addEventListener('click', loadWaitlist);
+document.getElementById('waitlistSearch')?.addEventListener('input', renderWaitlist);
+document.querySelector('[data-view="waitlist"]')?.addEventListener('click', () => {
+  const msg = document.getElementById('waitlistSendMessage');
+  msg.textContent = '';
+  msg.hidden = true;
+  loadWaitlist();
+});
